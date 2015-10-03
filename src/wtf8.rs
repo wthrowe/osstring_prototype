@@ -28,19 +28,19 @@
 use core::char::{encode_utf8_raw, encode_utf16_raw};
 use core::str::next_code_point;
 
-use ascii::*;
-use borrow::Cow;
-use char;
-use fmt;
-use hash::{Hash, Hasher};
-use iter::FromIterator;
-use mem;
-use ops;
-use slice;
-use str;
-use string::String;
-use sys_common::AsInner;
-use vec::Vec;
+use std::ascii::*;
+use std::borrow::Cow;
+use std::char;
+use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::iter::FromIterator;
+use std::mem;
+use std::ops;
+use std::slice;
+use std::str;
+use std::string::String;
+//use std::sys_common::AsInner;
+use std::vec::Vec;
 
 const UTF8_REPLACEMENT_CHARACTER: &'static [u8] = b"\xEF\xBF\xBD";
 
@@ -379,9 +379,9 @@ pub struct Wtf8 {
     bytes: [u8]
 }
 
-impl AsInner<[u8]> for Wtf8 {
-    fn as_inner(&self) -> &[u8] { &self.bytes }
-}
+// impl AsInner<[u8]> for Wtf8 {
+//     fn as_inner(&self) -> &[u8] { &self.bytes }
+// }
 
 /// Format the slice with double quotes,
 /// and surrogates as `\u` followed by four hexadecimal digits.
@@ -389,7 +389,7 @@ impl AsInner<[u8]> for Wtf8 {
 impl fmt::Debug for Wtf8 {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         fn write_str_escaped(f: &mut fmt::Formatter, s: &str) -> fmt::Result {
-            use fmt::Write;
+            use std::fmt::Write;
             for c in s.chars().flat_map(|c| c.escape_default()) {
                 try!(f.write_char(c))
             }

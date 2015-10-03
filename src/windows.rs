@@ -11,13 +11,13 @@
 /// The underlying OsString/OsStr implementation on Windows is a
 /// wrapper around the "WTF-8" encoding; see the `wtf8` module for more.
 
-use borrow::Cow;
-use fmt::{self, Debug};
-use sys_common::wtf8::{Wtf8, Wtf8Buf};
-use string::String;
-use result::Result;
-use option::Option;
-use mem;
+use std::borrow::Cow;
+use std::fmt::{self, Debug};
+use wtf8::{Wtf8, Wtf8Buf};
+use std::string::String;
+use std::result::Result;
+use std::option::Option;
+use std::mem;
 
 #[derive(Clone, Hash)]
 pub struct Buf {
