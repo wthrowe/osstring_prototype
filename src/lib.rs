@@ -17,9 +17,11 @@
 #[macro_use]
 extern crate std;
 
-#[macro_use] mod os_str_def;
+mod sys_common;
 
 pub mod os_str;
 pub mod unix;
 pub mod windows;
 mod wtf8;
+
+pub use os_str::{OsStr, OsString};

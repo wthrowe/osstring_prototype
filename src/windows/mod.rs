@@ -8,29 +8,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-/// The underlying OsString/OsStr implementation on Unix systems: just
-/// a `Vec<u8>`/`[u8]`.
+/// The underlying OsString/OsStr implementation on Windows is a
+/// wrapper around the "WTF-8" encoding; see the `wtf8` module for more.
 
 use std::borrow::Cow;
 use std::fmt::{self, Debug};
-use std::vec::Vec;
-use std::str;
+use wtf8::{Wtf8, Wtf8Buf};
 use std::string::String;
+use std::result::Result;
+use std::option::Option;
 use std::mem;
 
 #[derive(Clone, Hash)]
 pub struct Buf {
-    pub inner: Vec<u8>
-}
-
-pub struct Slice {
-    pub inner: [u8]
-}
-
-impl Debug for Slice {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        self.to_string_lossy().fmt(formatter)
-    }
+    pub inner: Wtf8Buf
 }
 
 impl Debug for Buf {
@@ -39,48 +30,63 @@ impl Debug for Buf {
     }
 }
 
+pub struct Slice {
+    pub inner: Wtf8
+}
+
+impl Debug for Slice {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        self.inner.fmt(formatter)
+    }
+}
+
 impl Buf {
     pub fn from_string(s: String) -> Buf {
-        Buf { inner: s.into_bytes() }
+        Buf { inner: Wtf8Buf::from_string(s) }
     }
 
     pub fn as_slice(&self) -> &Slice {
-        unsafe { mem::transmute(&*self.inner) }
+        unsafe { mem::transmute(self.inner.as_slice()) }
     }
 
     pub fn into_string(self) -> Result<String, Buf> {
-        String::from_utf8(self.inner).map_err(|p| Buf { inner: p.into_bytes() } )
+        self.inner.into_string().map_err(|buf| Buf { inner: buf })
     }
 
     pub fn push_slice(&mut self, s: &Slice) {
-        self.inner.push_all(&s.inner)
+        self.inner.push_wtf8(&s.inner)
     }
 }
 
 impl Slice {
-    fn from_u8_slice(s: &[u8]) -> &Slice {
-        unsafe { mem::transmute(s) }
-    }
-
     pub fn from_str(s: &str) -> &Slice {
-        Slice::from_u8_slice(s.as_bytes())
+        unsafe { mem::transmute(Wtf8::from_str(s)) }
     }
 
     pub fn to_str(&self) -> Option<&str> {
-        str::from_utf8(&self.inner).ok()
+        self.inner.as_str()
     }
 
     pub fn to_string_lossy(&self) -> Cow<str> {
-        String::from_utf8_lossy(&self.inner)
+        self.inner.to_string_lossy()
     }
 
     pub fn to_owned(&self) -> Buf {
-        Buf { inner: self.inner.to_vec() }
+        let mut buf = Wtf8Buf::with_capacity(self.inner.len());
+        buf.push_wtf8(&self.inner);
+        Buf { inner: buf }
     }
 }
 
 pub mod os_str {
     use super::{Buf, Slice};
 
-    define_os_string!{false}
+    macro_rules! is_windows { () => { true } }
+    macro_rules! if_unix_windows { ($u:block $w:block) => { $w } }
+
+    include!("../os_str_def.rs");
 }
+pub use self::os_str::{OsStr, OsString};
+
+pub mod os_str_ext;
+pub use self::os_str_ext::{OsStrExt, OsStringExt};

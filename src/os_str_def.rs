@@ -8,9 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-macro_rules! define_os_string {
-    ($windows:expr) => {
-// Inner comments aren't valid in a macro.
+
+// This file isn't compiled normally, but is included into the two
+// OS-specific os_str modules.
+
+
+// Inner comments aren't valid in an include.
 // //! A type that can represent all platform-native strings, but is cheaply
 // //! interconvertable with Rust strings.
 // //!
@@ -46,7 +49,7 @@ use std::vec::Vec;
 // use unix::{Buf, Slice};
 // #[cfg(windows)]
 // use windows::{Buf, Slice};
-//use std::sys_common::{AsInner, IntoInner, FromInner};
+use sys_common::{AsInner, IntoInner, FromInner};
 
 /// Owned, mutable OS strings.
 #[derive(Clone)]
@@ -79,14 +82,17 @@ impl OsString {
     }
 
     fn _from_bytes(vec: Vec<u8>) -> Option<OsString> {
-        if $windows {
-            String::from_utf8(vec).ok().map(OsString::from)
-        } else {
-            // use std::os::unix::ffi::OsStringExt;
-            // Some(OsString::from_vec(vec))
-            unimplemented!()
+        if_unix_windows! {
+            {
+                use unix::OsStringExt;
+                Some(OsString::from_vec(vec))
+            }
+            {
+                String::from_utf8(vec).ok().map(OsString::from)
+            }
         }
     }
+
 
     /// Converts to an `OsStr` slice.
     pub fn as_os_str(&self) -> &OsStr {
@@ -237,7 +243,7 @@ impl OsStr {
     /// valid unicode, in which case it produces UTF-8-encoded
     /// data. This may entail checking validity.
     pub fn to_bytes(&self) -> Option<&[u8]> {
-        if $windows {
+        if is_windows!() {
             self.to_str().map(|s| s.as_bytes())
         } else {
             Some(self.bytes())
@@ -360,22 +366,20 @@ impl AsRef<OsStr> for String {
     }
 }
 
-// impl FromInner<Buf> for OsString {
-//     fn from_inner(buf: Buf) -> OsString {
-//         OsString { inner: buf }
-//     }
-// }
+impl FromInner<Buf> for OsString {
+    fn from_inner(buf: Buf) -> OsString {
+        OsString { inner: buf }
+    }
+}
 
-// impl IntoInner<Buf> for OsString {
-//     fn into_inner(self) -> Buf {
-//         self.inner
-//     }
-// }
+impl IntoInner<Buf> for OsString {
+    fn into_inner(self) -> Buf {
+        self.inner
+    }
+}
 
-// impl AsInner<Slice> for OsStr {
-//     fn as_inner(&self) -> &Slice {
-//         &self.inner
-//     }
-// }
-
-}} // End macro_rules!
+impl AsInner<Slice> for OsStr {
+    fn as_inner(&self) -> &Slice {
+        &self.inner
+    }
+}
