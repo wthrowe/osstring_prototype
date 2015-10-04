@@ -14,6 +14,7 @@
 // This somewhat silly looking sequence is avoid the automatic prelude
 // import so that code behaves more like it does in libstd itself.
 #![no_std]
+#[macro_use]
 extern crate std;
 
 pub mod os_str;

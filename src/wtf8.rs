@@ -797,8 +797,8 @@ impl AsciiExt for Wtf8 {
 
 #[cfg(test)]
 mod tests {
-    use prelude::v1::*;
-    use borrow::Cow;
+    use std::prelude::v1::*;
+    use std::borrow::Cow;
     use super::*;
 
     #[test]
