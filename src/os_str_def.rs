@@ -106,6 +106,13 @@ impl OsString {
         self.inner.into_string().map_err(|buf| OsString { inner: buf} )
     }
 
+    /// Converts an `OsString` into a `String`, avoiding a copy if possible.
+    ///
+    /// Any non-Unicode sequences are replaced with U+FFFD REPLACEMENT CHARACTER.
+    pub fn into_string_lossy(self) -> String {
+        self.inner.into_string_lossy()
+    }
+
     /// Extends the string with the given `&OsStr` slice.
     pub fn push<T: AsRef<OsStr>>(&mut self, s: T) {
         self.inner.push_slice(&s.as_ref().inner)
@@ -472,6 +479,12 @@ mod tests {
     fn osstring_into_string() {
         assert_eq!(utf8_osstring().into_string(), Ok(utf8_str().to_string()));
         assert_eq!(non_utf8_osstring().into_string(), Err(non_utf8_osstring()));
+    }
+
+    #[test]
+    fn osstring_into_string_lossy() {
+        assert_eq!(utf8_osstring().into_string_lossy(), utf8_str());
+        assert_eq!(non_utf8_osstring().into_string_lossy(), String::from_utf8_lossy(b"\xFF"));
     }
 
     #[test]

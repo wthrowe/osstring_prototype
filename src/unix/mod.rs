@@ -52,6 +52,10 @@ impl Buf {
         String::from_utf8(self.inner).map_err(|p| Buf { inner: p.into_bytes() } )
     }
 
+    pub fn into_string_lossy(self) -> String {
+        self.into_string().unwrap_or_else(|buf| buf.as_slice().to_string_lossy().into_owned())
+    }
+
     pub fn push_slice(&mut self, s: &Slice) {
         self.inner.push_all(&s.inner)
     }

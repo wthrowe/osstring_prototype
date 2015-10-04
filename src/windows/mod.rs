@@ -53,6 +53,10 @@ impl Buf {
         self.inner.into_string().map_err(|buf| Buf { inner: buf })
     }
 
+    pub fn into_string_lossy(self) -> String {
+        self.inner.into_string_lossy()
+    }
+
     pub fn push_slice(&mut self, s: &Slice) {
         self.inner.push_wtf8(&s.inner)
     }
