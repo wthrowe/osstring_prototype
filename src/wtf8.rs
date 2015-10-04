@@ -540,6 +540,17 @@ impl Wtf8 {
         self.bytes.starts_with(prefix.as_bytes())
     }
 
+    /// If the WTF-8 string starts with the UTF-8 string `prefix`,
+    /// returns the remainder of the WTF-8 string, otherwise returns
+    /// `None`.
+    pub fn remove_prefix_str(&self, prefix: &str) -> Option<&Wtf8> {
+        if self.bytes.starts_with(prefix.as_bytes()) {
+            Some(unsafe { Self::from_bytes_unchecked(&self.bytes[prefix.len()..]) })
+        } else {
+            None
+        }
+    }
+
     #[inline]
     fn next_surrogate(&self, mut pos: usize) -> Option<(usize, u16)> {
         let mut iter = self.bytes[pos..].iter();
@@ -1209,5 +1220,17 @@ mod tests {
         string.push(CodePoint::from_u32(0xD800).unwrap());
         assert!(string.starts_with_str(""));
         assert!(!string.starts_with_str("a"));
+    }
+
+    #[test]
+    fn wtf8_remove_prefix_str() {
+        assert_eq!(Wtf8::from_str("").remove_prefix_str(""), Some(Wtf8::from_str("")));
+        assert_eq!(Wtf8::from_str("ab").remove_prefix_str(""), Some(Wtf8::from_str("ab")));
+        assert_eq!(Wtf8::from_str("").remove_prefix_str("a"), None);
+        assert_eq!(Wtf8::from_str("ab").remove_prefix_str("a"), Some(Wtf8::from_str("b")));
+        let mut string = Wtf8Buf::new();
+        string.push(CodePoint::from_u32(0xD800).unwrap());
+        assert_eq!(string.remove_prefix_str(""), Some(&string[..]));
+        assert_eq!(string.remove_prefix_str("a"), None);
     }
 }

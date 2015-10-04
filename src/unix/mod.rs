@@ -89,6 +89,14 @@ impl Slice {
     pub fn starts_with_str(&self, prefix: &str) -> bool {
         self.inner.starts_with(prefix.as_bytes())
     }
+
+    pub fn remove_prefix_str(&self, prefix: &str) -> Option<&Slice> {
+        if self.inner.starts_with(prefix.as_bytes()) {
+            Some(Self::from_u8_slice(&self.inner[prefix.len()..]))
+        } else {
+            None
+        }
+    }
 }
 
 pub mod os_str {

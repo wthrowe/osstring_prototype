@@ -64,7 +64,11 @@ impl Buf {
 
 impl Slice {
     pub fn from_str(s: &str) -> &Slice {
-        unsafe { mem::transmute(Wtf8::from_str(s)) }
+        Self::from_wtf8(Wtf8::from_str(s))
+    }
+
+    fn from_wtf8(s: &Wtf8) -> &Slice {
+        unsafe { mem::transmute(s) }
     }
 
     pub fn to_str(&self) -> Option<&str> {
@@ -87,6 +91,10 @@ impl Slice {
 
     pub fn starts_with_str(&self, prefix: &str) -> bool {
         self.inner.starts_with_str(prefix)
+    }
+
+    pub fn remove_prefix_str(&self, prefix: &str) -> Option<&Slice> {
+        self.inner.remove_prefix_str(prefix).map(|s| Self::from_wtf8(s))
     }
 }
 

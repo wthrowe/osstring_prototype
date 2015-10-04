@@ -284,6 +284,12 @@ impl OsStr {
     pub fn starts_with_str(&self, prefix: &str) -> bool {
         self.inner.starts_with_str(prefix)
     }
+
+    /// If the string starts with the given `&str`, returns the rest
+    /// of the string.  Otherwise returns `None`.
+    pub fn remove_prefix_str(&self, prefix: &str) -> Option<&OsStr> {
+        self.inner.remove_prefix_str(prefix).map(|s| Self::from_inner(s))
+    }
 }
 
 impl PartialEq for OsStr {
@@ -512,6 +518,20 @@ mod tests {
         assert!(utf8_osstring().starts_with_str(utf8_str()));
         assert!(non_utf8_osstring().starts_with_str(""));
         assert!(!non_utf8_osstring().starts_with_str("a"));
+    }
+
+    #[test]
+    fn osstr_remove_prefix_str() {
+        assert_eq!(OsStr::new("").remove_prefix_str(""), Some(OsStr::new("")));
+        assert_eq!(OsStr::new("").remove_prefix_str("a"), None);
+        assert_eq!(OsStr::new("abc").remove_prefix_str(""), Some(OsStr::new("abc")));
+        assert_eq!(OsStr::new("abc").remove_prefix_str("ab"), Some(OsStr::new("c")));
+        assert_eq!(OsStr::new("abc").remove_prefix_str("b"), None);
+        assert_eq!(non_utf8_osstring().remove_prefix_str(""), Some(&non_utf8_osstring()[..]));
+        assert_eq!(non_utf8_osstring().remove_prefix_str("a"), None);
+        let mut string = OsString::from("X");
+        string.push(non_utf8_osstring());
+        assert_eq!(string.remove_prefix_str("X"), Some(&non_utf8_osstring()[..]));
     }
 
     #[test]
