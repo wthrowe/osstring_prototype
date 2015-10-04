@@ -383,3 +383,67 @@ impl AsInner<Slice> for OsStr {
         &self.inner
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use std::prelude::v1::*;
+    use super::*;
+
+    fn utf8_str() -> &'static str { "aé 💩" }
+    fn utf8_osstring() -> OsString {
+        OsString::from(utf8_str())
+    }
+
+    fn non_utf8_osstring() -> OsString {
+        if_unix_windows! {
+            {
+                use unix::OsStringExt;
+                let string = OsString::from_vec(vec![0xFF]);
+                assert!(string.to_str().is_none());
+                string
+            }
+            {
+                use windows::OsStringExt;
+                let string = OsString::from_wide(&[0xD800]);
+                assert!(string.to_str().is_none());
+                string
+            }
+        }
+    }
+
+
+    #[test]
+    fn osstring_eq_smoke() {
+        assert_eq!(OsString::new(), OsString::new());
+        let string = OsString::from("abc");
+        assert_eq!(utf8_osstring(), utf8_osstring());
+        assert!(OsString::new() != utf8_osstring());
+        assert!(utf8_osstring() != string);
+        assert_eq!(non_utf8_osstring(), non_utf8_osstring());
+    }
+
+    #[test]
+    fn osstring_from_bytes() {
+        assert_eq!(OsString::from_bytes(utf8_str().as_bytes()),
+                   Some(OsString::from(utf8_str())));
+    }
+
+    #[test]
+    fn osstring_into_string() {
+        assert_eq!(utf8_osstring().into_string(), Ok(utf8_str().to_string()));
+        assert_eq!(non_utf8_osstring().into_string(), Err(non_utf8_osstring()));
+    }
+
+    #[test]
+    fn osstring_push() {
+        let mut string = OsString::new();
+        string.push("foo");
+        string.push("x");
+        string.push(utf8_osstring());
+        assert_eq!(string, OsString::from(["foox", utf8_str()].concat()));
+        string.push(non_utf8_osstring());
+        assert!(string.into_string().is_err());
+    }
+
+}
