@@ -388,6 +388,7 @@ impl AsInner<Slice> for OsStr {
 #[cfg(test)]
 mod tests {
     use std::prelude::v1::*;
+    use std::borrow::Cow;
     use super::*;
 
     fn utf8_str() -> &'static str { "aé 💩" }
@@ -444,6 +445,39 @@ mod tests {
         assert_eq!(string, OsString::from(["foox", utf8_str()].concat()));
         string.push(non_utf8_osstring());
         assert!(string.into_string().is_err());
+    }
+
+    #[test]
+    fn osstr_to_str() {
+        assert_eq!(utf8_osstring().to_str(), Some(utf8_str()));
+        assert_eq!(non_utf8_osstring().to_str(), None);
+    }
+
+    #[test]
+    fn osstr_to_string_lossy() {
+        assert_eq!(utf8_osstring().to_string_lossy(),
+                   Cow::Borrowed(utf8_str()));
+        assert_eq!(non_utf8_osstring().to_string_lossy(),
+                   String::from_utf8_lossy(b"\xFF"));
+    }
+
+    #[test]
+    fn osstr_to_bytes() {
+        assert_eq!(utf8_osstring().to_bytes(), Some(utf8_str().as_bytes()));
+        if_unix_windows! {
+            {
+                assert_eq!(non_utf8_osstring().to_bytes(), Some(&b"\xFF"[..]));
+            }
+            {
+                assert_eq!(non_utf8_osstring().to_bytes(), None);
+            }
+        }
+    }
+
+    #[test]
+    fn osstring_compare_str() {
+        assert_eq!(&utf8_osstring(), utf8_str());
+        assert!(non_utf8_osstring() != *"");
     }
 
 }
