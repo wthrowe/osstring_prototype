@@ -106,7 +106,7 @@ pub mod os_str {
     use super::{Buf, Slice};
 
     macro_rules! is_windows { () => { true } }
-    macro_rules! if_unix_windows { ($u:block $w:block) => { $w } }
+    macro_rules! if_unix_windows { (unix $u:block windows $w:block) => { $w } }
 
     include!("../os_str_def.rs");
 }

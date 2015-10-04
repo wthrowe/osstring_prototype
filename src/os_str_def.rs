@@ -83,11 +83,11 @@ impl OsString {
 
     fn _from_bytes(vec: Vec<u8>) -> Option<OsString> {
         if_unix_windows! {
-            {
+            unix {
                 use unix::OsStringExt;
                 Some(OsString::from_vec(vec))
             }
-            {
+            windows {
                 String::from_utf8(vec).ok().map(OsString::from)
             }
         }
@@ -429,13 +429,13 @@ mod tests {
 
     fn non_utf8_osstring() -> OsString {
         if_unix_windows! {
-            {
+            unix {
                 use unix::OsStringExt;
                 let string = OsString::from_vec(vec![0xFF]);
                 assert!(string.to_str().is_none());
                 string
             }
-            {
+            windows {
                 use windows::OsStringExt;
                 let string = OsString::from_wide(&[0xD800]);
                 assert!(string.to_str().is_none());
@@ -510,10 +510,10 @@ mod tests {
     fn osstr_to_bytes() {
         assert_eq!(utf8_osstring().to_bytes(), Some(utf8_str().as_bytes()));
         if_unix_windows! {
-            {
+            unix {
                 assert_eq!(non_utf8_osstring().to_bytes(), Some(&b"\xFF"[..]));
             }
-            {
+            windows {
                 assert_eq!(non_utf8_osstring().to_bytes(), None);
             }
         }
