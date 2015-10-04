@@ -278,6 +278,12 @@ impl OsStr {
     fn bytes(&self) -> &[u8] {
         unsafe { mem::transmute(&self.inner) }
     }
+
+    /// Returns true if the string starts with a valid UTF-8 sequence
+    /// equal to the given `&str`.
+    pub fn starts_with_str(&self, prefix: &str) -> bool {
+        self.inner.starts_with_str(prefix)
+    }
 }
 
 impl PartialEq for OsStr {
@@ -496,6 +502,16 @@ mod tests {
                 assert_eq!(non_utf8_osstring().to_bytes(), None);
             }
         }
+    }
+
+    #[test]
+    fn osstr_starts_with_str() {
+        assert!(OsStr::new("").starts_with_str(""));
+        assert!(!OsStr::new("").starts_with_str("a"));
+        assert!(OsStr::new("abc").starts_with_str("ab"));
+        assert!(utf8_osstring().starts_with_str(utf8_str()));
+        assert!(non_utf8_osstring().starts_with_str(""));
+        assert!(!non_utf8_osstring().starts_with_str("a"));
     }
 
     #[test]

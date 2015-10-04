@@ -84,6 +84,10 @@ impl Slice {
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
+
+    pub fn starts_with_str(&self, prefix: &str) -> bool {
+        self.inner.starts_with_str(prefix)
+    }
 }
 
 pub mod os_str {

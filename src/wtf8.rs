@@ -534,6 +534,12 @@ impl Wtf8 {
         EncodeWide { code_points: self.code_points(), extra: 0 }
     }
 
+    /// Returns true if the slice starts with the given `&str`.
+    #[inline]
+    pub fn starts_with_str(&self, prefix: &str) -> bool {
+        self.bytes.starts_with(prefix.as_bytes())
+    }
+
     #[inline]
     fn next_surrogate(&self, mut pos: usize) -> Option<(usize, u16)> {
         let mut iter = self.bytes[pos..].iter();
@@ -1191,5 +1197,17 @@ mod tests {
         string.push_char('💩');
         assert_eq!(string.encode_wide().collect::<Vec<_>>(),
                    vec![0x61, 0xE9, 0x20, 0xD83D, 0xD83D, 0xDCA9]);
+    }
+
+    #[test]
+    fn wtf8_starts_with_str() {
+        assert!(Wtf8::from_str("").starts_with_str(""));
+        assert!(Wtf8::from_str("ab").starts_with_str(""));
+        assert!(!Wtf8::from_str("").starts_with_str("a"));
+        assert!(Wtf8::from_str("ab").starts_with_str("a"));
+        let mut string = Wtf8Buf::new();
+        string.push(CodePoint::from_u32(0xD800).unwrap());
+        assert!(string.starts_with_str(""));
+        assert!(!string.starts_with_str("a"));
     }
 }
