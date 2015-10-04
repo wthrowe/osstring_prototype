@@ -445,6 +445,12 @@ impl Wtf8 {
         self.bytes.len()
     }
 
+    /// Returns true if the string contains no bytes.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+
     /// Returns the code point at `position` if it is in the ASCII range,
     /// or `b'\xFF' otherwise.
     ///
@@ -1081,6 +1087,12 @@ mod tests {
     fn wtf8_len() {
         assert_eq!(Wtf8::from_str("").len(), 0);
         assert_eq!(Wtf8::from_str("aé 💩").len(), 8);
+    }
+
+    #[test]
+    fn wtf8_is_empty() {
+        assert!(Wtf8::from_str("").is_empty());
+        assert!(!Wtf8::from_str("💩").is_empty());
     }
 
     #[test]

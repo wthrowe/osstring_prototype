@@ -77,6 +77,10 @@ impl Slice {
     pub fn to_owned(&self) -> Buf {
         Buf { inner: self.inner.to_vec() }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
 }
 
 pub mod os_str {

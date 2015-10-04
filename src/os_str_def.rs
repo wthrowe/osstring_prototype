@@ -214,6 +214,11 @@ impl OsStr {
         unsafe { mem::transmute(inner) }
     }
 
+    /// Returns true if the string contains no bytes.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
     /// Yields a `&str` slice if the `OsStr` is valid unicode.
     ///
     /// This conversion may entail doing a check for UTF-8 validity.
@@ -445,6 +450,13 @@ mod tests {
         assert_eq!(string, OsString::from(["foox", utf8_str()].concat()));
         string.push(non_utf8_osstring());
         assert!(string.into_string().is_err());
+    }
+
+    #[test]
+    fn osstr_is_empty() {
+        assert!(OsString::new().is_empty());
+        assert!(!utf8_osstring().is_empty());
+        assert!(!non_utf8_osstring().is_empty());
     }
 
     #[test]

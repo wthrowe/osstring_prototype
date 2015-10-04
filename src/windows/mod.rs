@@ -76,6 +76,10 @@ impl Slice {
         buf.push_wtf8(&self.inner);
         Buf { inner: buf }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
 }
 
 pub mod os_str {
