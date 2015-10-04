@@ -298,6 +298,13 @@ impl OsStr {
     pub fn slice_shift_char(&self) -> Option<(char, &OsStr)> {
         self.inner.slice_shift_char().map(|(a, b)| (a, Self::from_inner(b)))
     }
+
+    /// If the `OsStr` starts with a UTF-8 section followed by
+    /// `boundary`, returns the sections before and after the boundary
+    /// character.  Otherwise returns `None`.
+    pub fn split_off_str(&self, boundary: char) -> Option<(&str, &OsStr)> {
+        self.inner.split_off_str(boundary).map(|(a, b)| (a, Self::from_inner(b)))
+    }
 }
 
 impl PartialEq for OsStr {
@@ -558,6 +565,17 @@ mod tests {
             }
         }).collect();
         assert_eq!(chars, ['a', 'é', ' ', '💩']);
+    }
+
+    #[test]
+    fn osstr_split_off_str() {
+        assert_eq!(OsStr::new("").split_off_str('a'), None);
+
+        let mut string = OsString::from("aé 💩");
+        string.push(non_utf8_osstring());
+        assert_eq!(string.split_off_str('💩'), Some(("aé ", &non_utf8_osstring()[..])));
+        string.push("x");
+        assert_eq!(string.split_off_str('x'), None);
     }
 
     #[test]

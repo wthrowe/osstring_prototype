@@ -107,6 +107,16 @@ impl Slice {
             .map(|first|
                  (first, Self::from_u8_slice(&self.inner[first.len_utf8()..])))
     }
+
+    pub fn split_off_str(&self, boundary: char) -> Option<(&str, &Slice)> {
+        let utf8_prefix = match str::from_utf8(&self.inner) {
+            Ok(s) => s,
+            Err(e) => str::from_utf8(&self.inner[0..e.valid_up_to()]).unwrap()
+        };
+        utf8_prefix.find(boundary)
+            .map(|b| (&utf8_prefix[0..b],
+                      Self::from_u8_slice(&self.inner[b + boundary.len_utf8()..])))
+    }
 }
 
 pub mod os_str {

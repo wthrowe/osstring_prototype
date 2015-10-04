@@ -100,6 +100,10 @@ impl Slice {
     pub fn slice_shift_char(&self) -> Option<(char, &Slice)> {
         self.inner.slice_shift_char().map(|(a, b)| (a, Self::from_wtf8(b)))
     }
+
+    pub fn split_off_str(&self, boundary: char) -> Option<(&str, &Slice)> {
+        self.inner.split_off_str(boundary).map(|(a, b)| (a, Self::from_wtf8(b)))
+    }
 }
 
 pub mod os_str {

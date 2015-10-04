@@ -565,6 +565,20 @@ impl Wtf8 {
                           unsafe { Self::from_bytes_unchecked(&self.bytes[first.len_utf8()..]) }))
     }
 
+    /// If the WTF-8 string starts with a UTF-8 section followed by
+    /// `boundary`, returns the sections before and after the boundary
+    /// character.  Otherwise returns `None`.
+    pub fn split_off_str(&self, boundary: char) -> Option<(&str, &Wtf8)> {
+        let utf8_prefix = match str::from_utf8(&self.bytes) {
+            Ok(s) => s,
+            Err(e) => str::from_utf8(&self.bytes[0..e.valid_up_to()]).unwrap()
+        };
+        utf8_prefix.find(boundary)
+            .map(|b| (&utf8_prefix[0..b],
+                      unsafe {
+                          Self::from_bytes_unchecked(&self.bytes[b + boundary.len_utf8()..])
+                      }))
+    }
 
     #[inline]
     fn next_surrogate(&self, mut pos: usize) -> Option<(usize, u16)> {
@@ -1267,5 +1281,18 @@ mod tests {
             }
         }).collect();
         assert_eq!(chars, ['a', 'é', ' ', '💩']);
+    }
+
+    #[test]
+    fn wtf8_split_off_str() {
+        assert_eq!(Wtf8::from_str("").split_off_str('a'), None);
+
+        let mut non_utf8 = Wtf8Buf::new();
+        non_utf8.push(CodePoint::from_u32(0xD800).unwrap());
+        let mut string = Wtf8Buf::from_str("aé 💩");
+        string.push_wtf8(&non_utf8);
+        assert_eq!(string.split_off_str('💩'), Some(("aé ", &non_utf8[..])));
+        string.push_str("x");
+        assert_eq!(string.split_off_str('x'), None);
     }
 }
