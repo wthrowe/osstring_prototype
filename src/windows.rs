@@ -77,3 +77,9 @@ impl Slice {
         Buf { inner: buf }
     }
 }
+
+pub mod os_str {
+    use super::{Buf, Slice};
+
+    define_os_string!{true}
+}

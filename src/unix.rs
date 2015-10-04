@@ -78,3 +78,9 @@ impl Slice {
         Buf { inner: self.inner.to_vec() }
     }
 }
+
+pub mod os_str {
+    use super::{Buf, Slice};
+
+    define_os_string!{false}
+}

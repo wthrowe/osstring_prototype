@@ -17,6 +17,8 @@
 #[macro_use]
 extern crate std;
 
+#[macro_use] mod os_str_def;
+
 pub mod os_str;
 pub mod unix;
 pub mod windows;
