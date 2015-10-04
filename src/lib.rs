@@ -9,6 +9,7 @@
 #![feature(slice_bytes)]
 #![feature(slice_patterns)]
 #![feature(str_internals)]
+#![feature(utf8_error)]
 #![feature(vec_push_all)]
 
 // This somewhat silly looking sequence is avoid the automatic prelude

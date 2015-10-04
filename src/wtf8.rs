@@ -551,6 +551,21 @@ impl Wtf8 {
         }
     }
 
+    /// Retrieves the first code point from the string and returns it
+    /// and the remainder.  Returns `None` if the string does not
+    /// start with a code point (either because it it empty or because
+    /// it starts with non-UTF-8 data).
+    pub fn slice_shift_char(&self) -> Option<(char, &Wtf8)> {
+        let utf8_prefix = match str::from_utf8(&self.bytes) {
+            Ok(s) => s,
+            Err(e) => str::from_utf8(&self.bytes[0..e.valid_up_to()]).unwrap()
+        };
+        utf8_prefix.chars().next()
+            .map(|first| (first,
+                          unsafe { Self::from_bytes_unchecked(&self.bytes[first.len_utf8()..]) }))
+    }
+
+
     #[inline]
     fn next_surrogate(&self, mut pos: usize) -> Option<(usize, u16)> {
         let mut iter = self.bytes[pos..].iter();
@@ -828,6 +843,7 @@ impl AsciiExt for Wtf8 {
 mod tests {
     use std::prelude::v1::*;
     use std::borrow::Cow;
+    use std::mem;
     use super::*;
 
     #[test]
@@ -1232,5 +1248,24 @@ mod tests {
         string.push(CodePoint::from_u32(0xD800).unwrap());
         assert_eq!(string.remove_prefix_str(""), Some(&string[..]));
         assert_eq!(string.remove_prefix_str("a"), None);
+    }
+
+    #[test]
+    fn wtf8_slice_shift_char() {
+        assert!(Wtf8Buf::new().slice_shift_char().is_none());
+
+        let non_utf8 = CodePoint::from_u32(0xD800).unwrap();
+        let mut string = Wtf8Buf::from_str("aé 💩");
+        string.push(non_utf8);
+
+        let chars: Vec<char> = (0..).scan(&string[..], |s, _| {
+            if let Some((c, rest)) = s.slice_shift_char() {
+                mem::replace(s, rest);
+                Some(c)
+            } else {
+                None
+            }
+        }).collect();
+        assert_eq!(chars, ['a', 'é', ' ', '💩']);
     }
 }

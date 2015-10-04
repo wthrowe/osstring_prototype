@@ -96,6 +96,10 @@ impl Slice {
     pub fn remove_prefix_str(&self, prefix: &str) -> Option<&Slice> {
         self.inner.remove_prefix_str(prefix).map(|s| Self::from_wtf8(s))
     }
+
+    pub fn slice_shift_char(&self) -> Option<(char, &Slice)> {
+        self.inner.slice_shift_char().map(|(a, b)| (a, Self::from_wtf8(b)))
+    }
 }
 
 pub mod os_str {

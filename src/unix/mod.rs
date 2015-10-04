@@ -97,6 +97,16 @@ impl Slice {
             None
         }
     }
+
+    pub fn slice_shift_char(&self) -> Option<(char, &Slice)> {
+        let utf8_prefix = match str::from_utf8(&self.inner) {
+            Ok(s) => s,
+            Err(e) => str::from_utf8(&self.inner[0..e.valid_up_to()]).unwrap()
+        };
+        utf8_prefix.chars().next()
+            .map(|first|
+                 (first, Self::from_u8_slice(&self.inner[first.len_utf8()..])))
+    }
 }
 
 pub mod os_str {

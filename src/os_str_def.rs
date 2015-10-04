@@ -290,6 +290,14 @@ impl OsStr {
     pub fn remove_prefix_str(&self, prefix: &str) -> Option<&OsStr> {
         self.inner.remove_prefix_str(prefix).map(|s| Self::from_inner(s))
     }
+
+    /// Retrieves the first character from the `OsStr` and returns it
+    /// and the remainder of the `OsStr`.  Returns `None` if the
+    /// `OsStr` does not start with a character (either because it it
+    /// empty or because it starts with non-UTF-8 data).
+    pub fn slice_shift_char(&self) -> Option<(char, &OsStr)> {
+        self.inner.slice_shift_char().map(|(a, b)| (a, Self::from_inner(b)))
+    }
 }
 
 impl PartialEq for OsStr {
@@ -411,6 +419,7 @@ impl AsInner<Slice> for OsStr {
 mod tests {
     use std::prelude::v1::*;
     use std::borrow::Cow;
+    use std::mem;
     use super::*;
 
     fn utf8_str() -> &'static str { "aé 💩" }
@@ -532,6 +541,23 @@ mod tests {
         let mut string = OsString::from("X");
         string.push(non_utf8_osstring());
         assert_eq!(string.remove_prefix_str("X"), Some(&non_utf8_osstring()[..]));
+    }
+
+    #[test]
+    fn osstr_slice_shift_char() {
+        assert!(OsStr::new("").slice_shift_char().is_none());
+
+        let mut string = OsString::from("aé 💩");
+        string.push(non_utf8_osstring());
+        let chars: Vec<char> = (0..).scan(&string[..], |s, _| {
+            if let Some((c, rest)) = s.slice_shift_char() {
+                mem::replace(s, rest);
+                Some(c)
+            } else {
+                None
+            }
+        }).collect();
+        assert_eq!(chars, ['a', 'é', ' ', '💩']);
     }
 
     #[test]
