@@ -306,6 +306,12 @@ impl Wtf8Buf {
         self.bytes.truncate(new_len)
     }
 
+    /// Empties the string.
+    #[inline]
+    pub fn clear(&mut self) {
+        self.bytes.clear()
+    }
+
     /// Consumes the WTF-8 string and tries to convert it to UTF-8.
     ///
     /// This does not copy the data.
@@ -1003,6 +1009,13 @@ mod tests {
     fn wtf8buf_truncate_fail_longer() {
         let mut string = Wtf8Buf::from_str("aé");
         string.truncate(4);
+    }
+
+    #[test]
+    fn wtf8buf_clear() {
+        let mut string = Wtf8Buf::from_str("aé");
+        string.clear();
+        assert!(string.is_empty());
     }
 
     #[test]

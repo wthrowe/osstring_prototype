@@ -110,6 +110,11 @@ impl OsString {
     pub fn push<T: AsRef<OsStr>>(&mut self, s: T) {
         self.inner.push_slice(&s.as_ref().inner)
     }
+
+    /// Empties the string.
+    pub fn clear(&mut self) {
+        self.inner.clear()
+    }
 }
 
 impl From<String> for OsString {
@@ -450,6 +455,13 @@ mod tests {
         assert_eq!(string, OsString::from(["foox", utf8_str()].concat()));
         string.push(non_utf8_osstring());
         assert!(string.into_string().is_err());
+    }
+
+    #[test]
+    fn osstring_clear() {
+        let mut string = non_utf8_osstring();
+        string.clear();
+        assert_eq!(&string, "");
     }
 
     #[test]

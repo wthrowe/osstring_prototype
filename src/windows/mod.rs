@@ -56,6 +56,10 @@ impl Buf {
     pub fn push_slice(&mut self, s: &Slice) {
         self.inner.push_wtf8(&s.inner)
     }
+
+    pub fn clear(&mut self) {
+        self.inner.clear()
+    }
 }
 
 impl Slice {
