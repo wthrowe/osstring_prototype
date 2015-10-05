@@ -385,6 +385,12 @@ pub struct Wtf8 {
     bytes: [u8]
 }
 
+pub struct Split<'a> {
+    slice: &'a Wtf8,
+    boundary: u8,
+    position: usize,
+}
+
 // impl AsInner<[u8]> for Wtf8 {
 //     fn as_inner(&self) -> &[u8] { &self.bytes }
 // }
@@ -578,6 +584,16 @@ impl Wtf8 {
                       unsafe {
                           Self::from_bytes_unchecked(&self.bytes[b + boundary.len_utf8()..])
                       }))
+    }
+
+    pub fn split_ascii<'a>(&'a self, boundary: u8) -> Split<'a> {
+        assert!(boundary < 128, "not ASCII");
+
+        Split {
+            slice: self,
+            boundary: boundary,
+            position: 0,
+        }
     }
 
     #[inline]
@@ -852,6 +868,35 @@ impl AsciiExt for Wtf8 {
     fn make_ascii_uppercase(&mut self) { self.bytes.make_ascii_uppercase() }
     fn make_ascii_lowercase(&mut self) { self.bytes.make_ascii_lowercase() }
 }
+
+impl<'a> Iterator for Split<'a> {
+    type Item = &'a Wtf8;
+
+    fn next(&mut self) -> Option<&'a Wtf8> {
+        // Using slice::split would make more sense here, but the
+        // iterator returned by that is unnamable, so it can't be
+        // stored directly in a struct.
+        let start = self.position;
+        if start > self.slice.len() { return None; }
+
+        let length = self.slice.bytes[start..].iter().position(|&b| b == self.boundary);
+        match length {
+            Some(length) => {
+                self.position += length + 1;
+                Some(unsafe {
+                    Wtf8::from_bytes_unchecked(&self.slice.bytes[start..start + length])
+                })
+            },
+            None => {
+                self.position = self.slice.len() + 1;
+                Some(unsafe {
+                    Wtf8::from_bytes_unchecked(&self.slice.bytes[start..])
+                })
+            }
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -1294,5 +1339,29 @@ mod tests {
         assert_eq!(string.split_off_str('💩'), Some(("aé ", &non_utf8[..])));
         string.push_str("x");
         assert_eq!(string.split_off_str('x'), None);
+    }
+
+    #[test]
+    fn wtf8_split_ascii() {
+        assert_eq!(Wtf8::from_str("").split_ascii(b'a').collect::<Vec<_>>(),
+                   [Wtf8::from_str("")]);
+
+        let mut non_utf8 = Wtf8Buf::new();
+        non_utf8.push(CodePoint::from_u32(0xD800).unwrap());
+        let mut string = Wtf8Buf::from_str("x");
+        string.push_wtf8(&non_utf8);
+        string.push_str("xxaé 💩x");
+        string.push_wtf8(&non_utf8);
+        string.push_str("x");
+        assert_eq!(string.split_ascii(b'x').collect::<Vec<_>>(),
+                   [Wtf8::from_str(""), &non_utf8[..], Wtf8::from_str(""),
+                    Wtf8::from_str("aé 💩"), &non_utf8[..], Wtf8::from_str("")]);
+    }
+
+
+    #[test]
+    #[should_panic(message = "not ASCII")]
+    fn wtf8_split_nonascii() {
+        let _ = Wtf8::from_str("").split_ascii(255);
     }
 }

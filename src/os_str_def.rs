@@ -46,9 +46,9 @@ use std::hash::{Hash, Hasher};
 use std::vec::Vec;
 
 // #[cfg(unix)]
-// use unix::{Buf, Slice};
+// use unix::{Buf, Slice, Split as ImplSplit};
 // #[cfg(windows)]
-// use windows::{Buf, Slice};
+// use windows::{Buf, Slice, Split as ImplSplit};
 use sys_common::{AsInner, IntoInner, FromInner};
 
 /// Owned, mutable OS strings.
@@ -60,6 +60,11 @@ pub struct OsString {
 /// Slices into OS strings.
 pub struct OsStr {
     inner: Slice
+}
+
+/// Iterator over parts of an OS string.
+pub struct Split<'a> {
+    inner: ImplSplit<'a>
 }
 
 impl OsString {
@@ -312,6 +317,19 @@ impl OsStr {
     pub fn split_off_str(&self, boundary: char) -> Option<(&str, &OsStr)> {
         self.inner.split_off_str(boundary).map(|(a, b)| (a, Self::from_inner(b)))
     }
+
+    /// Returns an iterator over sections of the `OsStr` separated by
+    /// the given character.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the boundary character is not ASCII.
+    pub fn split<'a>(&'a self, boundary: char) -> Split<'a> {
+        assert!(boundary < 128 as char, "boundary not ASCII");
+        Split {
+            inner: self.inner.split_ascii(boundary as u8)
+        }
+    }
 }
 
 impl PartialEq for OsStr {
@@ -425,6 +443,14 @@ impl IntoInner<Buf> for OsString {
 impl AsInner<Slice> for OsStr {
     fn as_inner(&self) -> &Slice {
         &self.inner
+    }
+}
+
+impl<'a> Iterator for Split<'a> {
+    type Item = &'a OsStr;
+
+    fn next(&mut self) -> Option<&'a OsStr> {
+        self.inner.next().map(|s| OsStr::from_inner(s))
     }
 }
 
@@ -589,6 +615,28 @@ mod tests {
         assert_eq!(string.split_off_str('💩'), Some(("aé ", &non_utf8_osstring()[..])));
         string.push("x");
         assert_eq!(string.split_off_str('x'), None);
+    }
+
+    #[test]
+    fn osstr_split() {
+        assert_eq!(OsStr::new("").split('a').collect::<Vec<_>>(), [OsStr::new("")]);
+
+        let mut string = OsString::from("x");
+        string.push(non_utf8_osstring());
+        string.push("xx");
+        string.push(utf8_osstring());
+        string.push("x");
+        string.push(non_utf8_osstring());
+        string.push("x");
+        assert_eq!(string.split('x').collect::<Vec<_>>(),
+                   [OsStr::new(""), &non_utf8_osstring()[..], OsStr::new(""),
+                    &utf8_osstring()[..], &non_utf8_osstring()[..], OsStr::new("")]);
+    }
+
+    #[test]
+    #[should_panic(message = "not ASCII")]
+    fn osstr_split_nonascii() {
+        let _ = OsStr::new("").split('é');
     }
 
     #[test]

@@ -27,6 +27,12 @@ pub struct Slice {
     pub inner: [u8]
 }
 
+pub struct Split<'a> {
+    slice: &'a Slice,
+    boundary: u8,
+    position: usize,
+}
+
 impl Debug for Slice {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         self.to_string_lossy().fmt(formatter)
@@ -121,10 +127,42 @@ impl Slice {
             .map(|b| (&utf8_prefix[0..b],
                       Self::from_u8_slice(&self.inner[b + boundary.len_utf8()..])))
     }
+
+    pub fn split_ascii<'a>(&'a self, boundary: u8) -> Split<'a> {
+        Split {
+            slice: self,
+            boundary: boundary,
+            position: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for Split<'a> {
+    type Item = &'a Slice;
+
+    fn next(&mut self) -> Option<&'a Slice> {
+        // Using slice::split would make more sense here, but the
+        // iterator returned by that is unnamable, so it can't be
+        // stored directly in a struct.
+        let start = self.position;
+        if start > self.slice.inner.len() { return None; }
+
+        let length = self.slice.inner[start..].iter().position(|&b| b == self.boundary);
+        match length {
+            Some(length) => {
+                self.position += length + 1;
+                Some(Slice::from_u8_slice(&self.slice.inner[start..start + length]))
+            },
+            None => {
+                self.position = self.slice.inner.len() + 1;
+                Some(Slice::from_u8_slice(&self.slice.inner[start..]))
+            }
+        }
+    }
 }
 
 pub mod os_str {
-    use super::{Buf, Slice};
+    use super::{Buf, Slice, Split as ImplSplit};
 
     macro_rules! is_windows { () => { false } }
     macro_rules! if_unix_windows { (unix $u:block windows $w:block) => { $u } }
