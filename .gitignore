@@ -1,2 +1,2 @@
-*.rlib
-/osstring_prototype
+/target/
+/Cargo.lock
