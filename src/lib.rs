@@ -5,6 +5,7 @@
 #![feature(char_from_unchecked)]
 #![feature(char_internals)]
 #![feature(decode_utf16)]
+#![feature(iter_arith)]
 #![feature(no_std)]
 #![feature(slice_bytes)]
 #![feature(slice_patterns)]
@@ -20,6 +21,7 @@ extern crate std;
 
 mod sys_common;
 
+pub mod slice_concat_ext;
 pub mod std_integration;
 pub mod os_str;
 pub mod unix;
@@ -31,4 +33,5 @@ pub use std_integration::{OsStrPrototyping, OsStringPrototyping};
 
 pub mod prelude {
     pub use super::{OsStrPrototyping, OsStringPrototyping};
+    pub use super::slice_concat_ext::LocalSliceConcatExt;
 }

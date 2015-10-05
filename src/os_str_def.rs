@@ -39,6 +39,7 @@ use std::borrow::{Borrow, Cow, ToOwned};
 use std::ffi::CString;
 use std::fmt::{self, Debug};
 use std::mem;
+use slice_concat_ext::LocalSliceConcatExt;
 use std::string::String;
 use std::ops;
 use std::cmp;
@@ -476,6 +477,57 @@ impl<'a> Iterator for Split<'a> {
     }
 }
 
+impl<S: Borrow<OsStr>> LocalSliceConcatExt<OsStr> for [S] {
+    type Output = OsString;
+
+    fn concat(&self) -> OsString {
+        if self.is_empty() {
+            return OsString::new();
+        }
+
+        let len = self.iter().map(|s| s.borrow().len()).sum();
+        let mut result = OsString::with_capacity(len);
+
+        for s in self {
+            result.push(s.borrow())
+        }
+
+        result
+    }
+
+    fn join(&self, sep: &OsStr) -> OsString {
+        if self.is_empty() {
+            return OsString::new();
+        }
+
+        // concat is faster
+        if sep.is_empty() {
+            return self.concat();
+        }
+
+        // this is wrong without the guarantee that `self` is non-empty
+        // On Windows this may be a slight overestimate, but that's OK.
+        let len = sep.len() * (self.len() - 1)
+            + self.iter().map(|s| s.borrow().len()).sum::<usize>();
+        let mut result = OsString::with_capacity(len);
+        let mut first = true;
+
+        for s in self {
+            if first {
+                first = false;
+            } else {
+                result.push(sep);
+            }
+            result.push(s.borrow());
+        }
+        result
+    }
+
+    fn connect(&self, sep: &OsStr) -> OsString {
+        self.join(sep)
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -483,6 +535,7 @@ mod tests {
     use std::borrow::Cow;
     use std::mem;
     use super::*;
+    use slice_concat_ext::LocalSliceConcatExt;
 
     fn utf8_str() -> &'static str { "aé 💩" }
     fn utf8_osstring() -> OsString {
@@ -678,6 +731,27 @@ mod tests {
     fn osstring_compare_str() {
         assert_eq!(&utf8_osstring(), utf8_str());
         assert!(non_utf8_osstring() != *"");
+    }
+
+    #[test]
+    fn osstring_concat() {
+        let mut string = non_utf8_osstring();
+        string.push(utf8_osstring());
+        string.push(non_utf8_osstring());
+        assert_eq!([non_utf8_osstring(), utf8_osstring(), non_utf8_osstring()].concat(),
+                   string);
+    }
+
+    #[test]
+    fn osstring_join() {
+        let mut string = non_utf8_osstring();
+        string.push(utf8_osstring());
+        string.push("xyz");
+        string.push(utf8_osstring());
+        string.push(non_utf8_osstring());
+        assert_eq!([&non_utf8_osstring()[..], OsStr::new("xyz"), &non_utf8_osstring()[..]]
+                   .join(&utf8_osstring()[..]),
+                   string);
     }
 
 }

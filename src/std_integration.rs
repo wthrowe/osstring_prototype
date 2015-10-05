@@ -1,8 +1,10 @@
 use std::prelude::v1::*;
+use std::borrow::Borrow;
 use std::ffi;
 use std::mem;
 
 use os_str;
+use slice_concat_ext::LocalSliceConcatExt;
 
 macro_rules! make_conversions {
     ($a:ty : $b:ty) => {
@@ -100,11 +102,26 @@ impl<'a> Iterator for Split<'a> {
     }
 }
 
+impl<S: Borrow<ffi::OsStr>> LocalSliceConcatExt<ffi::OsStr> for [S] {
+    type Output = ffi::OsString;
+
+    fn concat(&self) -> Self::Output {
+        self.iter().map(|s| <&os_str::OsStr>::from(s.borrow())).collect::<Vec<_>>().concat().into()
+    }
+    fn join(&self, sep: &ffi::OsStr) -> Self::Output {
+        self.iter().map(|s| <&os_str::OsStr>::from(s.borrow())).collect::<Vec<_>>().join(<&os_str::OsStr>::from(sep.borrow())).into()
+    }
+    fn connect(&self, sep: &ffi::OsStr) -> Self::Output {
+        self.join(sep)
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use std::prelude::v1::*;
+    use prelude::*;
     use std::ffi::{OsStr, OsString};
-    use super::{OsStrPrototyping, OsStringPrototyping};
 
     #[test]
     fn osstring() {
@@ -127,5 +144,13 @@ mod tests {
         assert_eq!(string.split_off_str('l'), Some(("he", OsStr::new("lo"))));
         assert_eq!(string.split('l').collect::<Vec<&OsStr>>(),
                    [OsStr::new("he"), OsStr::new(""), OsStr::new("o")]);
+    }
+
+    #[test]
+    fn slice_concat_ext() {
+        assert_eq!([OsStr::new("Hello"), OsStr::new("world")].concat(),
+                   OsString::from("Helloworld"));
+        assert_eq!([OsStr::new("Hello"), OsStr::new("world")].join(OsStr::new(" ")),
+                   OsString::from("Hello world"));
     }
 }
