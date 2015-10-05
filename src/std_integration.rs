@@ -27,11 +27,19 @@ make_conversions!{&'a os_str::OsStr : &'a ffi::OsStr}
 make_conversions!{&'a mut os_str::OsStr : &'a mut ffi::OsStr}
 
 pub trait OsStringPrototyping {
+    fn with_capacity(capacity: usize) -> Self;
+    fn capacity(&self) -> usize;
     fn into_string_lossy(self) -> String;
     fn clear(&mut self);
 }
 
 impl OsStringPrototyping for ffi::OsString {
+    fn with_capacity(capacity: usize) -> Self {
+        os_str::OsString::with_capacity(capacity).into()
+    }
+    fn capacity(&self) -> usize {
+        <&os_str::OsString>::from(self).capacity()
+    }
     fn into_string_lossy(self) -> String {
         <os_str::OsString>::from(self).into_string_lossy()
     }
@@ -42,6 +50,7 @@ impl OsStringPrototyping for ffi::OsString {
 
 pub trait OsStrPrototyping {
     fn is_empty(&self) -> bool;
+    fn len(&self) -> usize;
     fn starts_with_str(&self, prefix: &str) -> bool;
     fn remove_prefix_str(&self, prefix: &str) -> Option<&Self>;
     fn slice_shift_char(&self) -> Option<(char, &Self)>;
@@ -52,6 +61,9 @@ pub trait OsStrPrototyping {
 impl OsStrPrototyping for ffi::OsStr {
     fn is_empty(&self) -> bool {
         <&os_str::OsStr>::from(self).is_empty()
+    }
+    fn len(&self) -> usize {
+        <&os_str::OsStr>::from(self).len()
     }
     fn starts_with_str(&self, prefix: &str) -> bool {
         <&os_str::OsStr>::from(self).starts_with_str(prefix)
@@ -96,6 +108,7 @@ mod tests {
 
     #[test]
     fn osstring() {
+        assert!(OsString::with_capacity(10).capacity() >= 10);
         let string = OsString::from("hello");
         assert_eq!(string.into_string_lossy(), "hello");
         let mut string = OsString::from("hello");
@@ -107,6 +120,7 @@ mod tests {
     fn osstr() {
         let string = OsString::from("hello");
         assert!(!string.is_empty());
+        assert_eq!(string.len(), 5);
         assert!(string.starts_with_str("he"));
         assert_eq!(string.remove_prefix_str("he"), Some(OsStr::new("llo")));
         assert_eq!(string.slice_shift_char(), Some(('h', OsStr::new("ello"))));

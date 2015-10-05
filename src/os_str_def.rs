@@ -98,6 +98,21 @@ impl OsString {
         }
     }
 
+    /// Creates a new `OsString` with the given capacity. The string will be able
+    /// to hold exactly `capacity` bytes without reallocating. If `capacity` is 0,
+    /// the string will not allocate.
+    ///
+    /// See main `OsString` documentation information about encoding.
+    pub fn with_capacity(capacity: usize) -> Self {
+        OsString { inner: Buf::with_capacity(capacity) }
+    }
+
+    /// Returns the number of bytes this `OsString` can hold without reallocating.
+    ///
+    /// See `OsString` introduction for information about encoding.
+    pub fn capacity(&self) -> usize {
+        self.inner.capacity()
+    }
 
     /// Converts to an `OsStr` slice.
     pub fn as_os_str(&self) -> &OsStr {
@@ -123,7 +138,7 @@ impl OsString {
         self.inner.push_slice(&s.as_ref().inner)
     }
 
-    /// Empties the string.
+    /// Truncates `self` to zero length.
     pub fn clear(&mut self) {
         self.inner.clear()
     }
@@ -231,9 +246,16 @@ impl OsStr {
         unsafe { mem::transmute(inner) }
     }
 
-    /// Returns true if the string contains no bytes.
+    /// Checks whether `self` is empty.
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
+    }
+
+    /// Returns the number of bytes in this string.
+    ///
+    /// See `OsStr` introduction for information about encoding.
+    pub fn len(&self) -> usize {
+        self.inner.len()
     }
 
     /// Yields a `&str` slice if the `OsStr` is valid unicode.
@@ -502,6 +524,12 @@ mod tests {
     }
 
     #[test]
+    fn osstring_capacity() {
+        assert!(OsString::with_capacity(10).capacity() >= 10);
+        assert!(OsString::from("Hello").capacity() >= 5);
+    }
+
+    #[test]
     fn osstring_into_string() {
         assert_eq!(utf8_osstring().into_string(), Ok(utf8_str().to_string()));
         assert_eq!(non_utf8_osstring().into_string(), Err(non_utf8_osstring()));
@@ -536,6 +564,13 @@ mod tests {
         assert!(OsString::new().is_empty());
         assert!(!utf8_osstring().is_empty());
         assert!(!non_utf8_osstring().is_empty());
+    }
+
+    #[test]
+    fn osstr_len() {
+        assert_eq!(OsStr::new("").len(), 0);
+        assert_eq!(utf8_osstring().len(), utf8_str().len());
+        assert!(non_utf8_osstring().len() > 0);
     }
 
     #[test]

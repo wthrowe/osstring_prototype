@@ -53,6 +53,14 @@ impl Buf {
         unsafe { mem::transmute(self.inner.as_slice()) }
     }
 
+    pub fn with_capacity(capacity: usize) -> Self {
+        Buf { inner: Wtf8Buf::with_capacity(capacity) }
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.inner.capacity()
+    }
+
     pub fn into_string(self) -> Result<String, Buf> {
         self.inner.into_string().map_err(|buf| Buf { inner: buf })
     }
@@ -95,6 +103,10 @@ impl Slice {
 
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.len()
     }
 
     pub fn starts_with_str(&self, prefix: &str) -> bool {

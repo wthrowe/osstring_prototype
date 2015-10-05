@@ -54,6 +54,14 @@ impl Buf {
         unsafe { mem::transmute(&*self.inner) }
     }
 
+    pub fn with_capacity(capacity: usize) -> Self {
+        Buf { inner: Vec::with_capacity(capacity) }
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.inner.capacity()
+    }
+
     pub fn into_string(self) -> Result<String, Buf> {
         String::from_utf8(self.inner).map_err(|p| Buf { inner: p.into_bytes() } )
     }
@@ -94,6 +102,10 @@ impl Slice {
 
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.len()
     }
 
     pub fn starts_with_str(&self, prefix: &str) -> bool {
