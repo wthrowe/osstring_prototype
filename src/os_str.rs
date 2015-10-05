@@ -9,6 +9,6 @@
 // except according to those terms.
 
 #[cfg(unix)]
-pub use unix::os_str::{OsStr, OsString};
+pub use unix::os_str::{OsStr, OsString, Split};
 #[cfg(windows)]
-pub use windows::os_str::{OsStr, OsString};
+pub use windows::os_str::{OsStr, OsString, Split};

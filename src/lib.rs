@@ -20,9 +20,15 @@ extern crate std;
 
 mod sys_common;
 
+pub mod std_integration;
 pub mod os_str;
 pub mod unix;
 pub mod windows;
 mod wtf8;
 
 pub use os_str::{OsStr, OsString};
+pub use std_integration::{OsStrPrototyping, OsStringPrototyping};
+
+pub mod prelude {
+    pub use super::{OsStrPrototyping, OsStringPrototyping};
+}
