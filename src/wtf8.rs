@@ -234,6 +234,18 @@ impl Wtf8Buf {
         self.bytes.reserve(additional)
     }
 
+    /// Reserves the minimum capacity for exactly `additional` more bytes to be
+    /// inserted in the given `OsString`. Does nothing if the capacity is already
+    /// sufficient.
+    ///
+    /// Note that the allocator may give the collection more space than it
+    /// requests. Therefore capacity can not be relied upon to be precisely
+    /// minimal. Prefer reserve if future insertions are expected.
+    #[inline]
+    pub fn reserve_exact(&mut self, additional: usize) {
+        self.bytes.reserve_exact(additional)
+    }
+
     /// Returns the number of bytes that this string buffer can hold without reallocating.
     #[inline]
     pub fn capacity(&self) -> usize {

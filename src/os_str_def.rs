@@ -115,6 +115,24 @@ impl OsString {
         self.inner.capacity()
     }
 
+    /// Reserves capacity for at least `additional` more bytes to be inserted in the
+    /// given `OsString`. The collection may reserve more space to avoid frequent
+    /// reallocations.
+    pub fn reserve(&mut self, additional: usize) {
+        self.inner.reserve(additional)
+    }
+
+    /// Reserves the minimum capacity for exactly `additional` more bytes to be
+    /// inserted in the given `OsString`. Does nothing if the capacity is already
+    /// sufficient.
+    ///
+    /// Note that the allocator may give the collection more space than it
+    /// requests. Therefore capacity can not be relied upon to be precisely
+    /// minimal. Prefer reserve if future insertions are expected.
+    pub fn reserve_exact(&mut self, additional: usize) {
+        self.inner.reserve_exact(additional)
+    }
+
     /// Converts to an `OsStr` slice.
     pub fn as_os_str(&self) -> &OsStr {
         self
@@ -580,6 +598,21 @@ mod tests {
     fn osstring_capacity() {
         assert!(OsString::with_capacity(10).capacity() >= 10);
         assert!(OsString::from("Hello").capacity() >= 5);
+    }
+
+    #[test]
+    fn osstring_reserve() {
+        let mut string = OsString::from("Hello");
+        let len = string.len();
+        let cap = string.capacity();
+        assert!(cap >= len);
+        string.reserve_exact(cap - len);
+        assert_eq!(string.capacity(), cap);
+        string.reserve_exact(cap - len + 1);
+        assert!(string.capacity() > cap);
+        let cap = string.capacity();
+        string.reserve(cap - len + 1);
+        assert!(string.capacity() > cap);
     }
 
     #[test]

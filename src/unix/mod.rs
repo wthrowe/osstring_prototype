@@ -62,6 +62,14 @@ impl Buf {
         self.inner.capacity()
     }
 
+    pub fn reserve(&mut self, additional: usize) {
+        self.inner.reserve(additional)
+    }
+
+    fn reserve_exact(&mut self, additional: usize) {
+        self.inner.reserve_exact(additional)
+    }
+
     pub fn into_string(self) -> Result<String, Buf> {
         String::from_utf8(self.inner).map_err(|p| Buf { inner: p.into_bytes() } )
     }

@@ -61,6 +61,14 @@ impl Buf {
         self.inner.capacity()
     }
 
+    pub fn reserve(&mut self, additional: usize) {
+        self.inner.reserve(additional)
+    }
+
+    fn reserve_exact(&mut self, additional: usize) {
+        self.inner.reserve_exact(additional)
+    }
+
     pub fn into_string(self) -> Result<String, Buf> {
         self.inner.into_string().map_err(|buf| Buf { inner: buf })
     }
