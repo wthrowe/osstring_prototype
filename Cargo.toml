@@ -3,3 +3,11 @@
 name = "osstring_prototype"
 version = "0.0.1"
 authors = [ "William Throwe <wtt6@cornell.edu>" ]
+
+description = "Implementations of proposed OS string interfaces"
+
+repository = "https://github.com/wthrowe/osstring_prototype"
+
+readme = "README"
+
+license = "Apache-2.0/MIT"

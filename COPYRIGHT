@@ -1,0 +1,9 @@
+This project is licensed under the same terms as the Rust Project
+(either Apache-2.0 or MIT, at your option).
+
+Large portions of this project were copied verbatim or with minor
+modifications from libstd in the Rust Project.  Files containing such
+sections have the standard Rust Project copyright header, and such
+sections are copyright 2015, The Rust Project Developers.
+
+This project as a whole is copyright 2015, William Throwe.

@@ -1,0 +1,14 @@
+This is a prototype implementation of RFCs #1307 and #????.  It is
+intended that all functionality in this crate will be either
+incorporated into libstd or dropped, so I do not intend for this crate
+to ever have a stable release.
+
+I originally thought this would be impossible to implement outside of
+libstd, but it turns our you can do anything with sufficiently many
+applications of mem::transmute.
+
+How to use:
+
+extern crate osstring_prototype;
+use osstring_prototype::prelude::*;
+// Pretend the RFCs have already been accepted and implemented.
