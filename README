@@ -1,4 +1,4 @@
-This is a prototype implementation of RFCs #1307 and #????.  It is
+This is a prototype implementation of RFCs #1307 and #1309.  It is
 intended that all functionality in this crate will be either
 incorporated into libstd or dropped, so I do not intend for this crate
 to ever have a stable release.
