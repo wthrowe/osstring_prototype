@@ -22,7 +22,9 @@ extern crate std;
 mod sys_common;
 
 pub mod slice_concat_ext;
+mod slice_searcher;
 pub mod std_integration;
+mod str;
 pub mod os_str;
 pub mod unix;
 pub mod windows;

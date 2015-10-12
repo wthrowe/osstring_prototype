@@ -28,8 +28,11 @@
 use core::char::{encode_utf8_raw, encode_utf16_raw};
 use core::str::next_code_point;
 
+use str::next_code_point_reverse;
+use slice_searcher::SliceSearcher;
+
 use std::ascii::*;
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow, ToOwned};
 use std::char;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -116,6 +119,27 @@ impl CodePoint {
     pub fn to_char_lossy(&self) -> char {
         self.to_char().unwrap_or('\u{FFFD}')
     }
+
+    /// Returns the code point at the start of the bytes returned by
+    /// the iterator.
+    pub fn from_iterator(mut iter: &mut slice::Iter<u8>) -> Option<CodePoint> {
+        next_code_point(iter).map(|c| CodePoint { value: c })
+    }
+
+    /// Returns the code point at the end of the bytes returned by the
+    /// iterator.
+    pub fn from_iterator_reverse(mut iter: &mut slice::Iter<u8>) -> Option<CodePoint> {
+        next_code_point_reverse(iter).map(|c| CodePoint { value: c })
+    }
+
+    /// Returns the surrogate decomposition of the code point.
+    pub fn to_surrogates(&self) -> Option<(u16, u16)> {
+        let mut buf = [0; 2];
+        match encode_utf16_raw(self.value, &mut buf) {
+            Some(2) => Some((buf[0], buf[1])),
+            _ => None
+        }
+    }
 }
 
 /// An owned, growable string of well-formed WTF-8 data.
@@ -133,6 +157,15 @@ impl ops::Deref for Wtf8Buf {
     fn deref(&self) -> &Wtf8 {
         self.as_slice()
     }
+}
+
+impl Borrow<Wtf8> for Wtf8Buf {
+    fn borrow(&self) -> &Wtf8 { &self[..] }
+}
+
+impl ToOwned for Wtf8 {
+    type Owned = Wtf8Buf;
+    fn to_owned(&self) -> Wtf8Buf { Wtf8Buf { bytes: self.bytes.to_owned() } }
 }
 
 /// Format the string with double quotes,
@@ -552,6 +585,124 @@ impl Wtf8 {
         EncodeWide { code_points: self.code_points(), extra: 0 }
     }
 
+    /// Returns the first ill-formed UTF-16 digit in the string.
+    fn first_wide(&self) -> Option<u16> {
+        let first_code_point =
+            match CodePoint::from_iterator(&mut self.bytes.iter()) {
+                Some(cp) => cp,
+                None => return None
+            };
+
+        match first_code_point.to_surrogates() {
+            Some((s, _)) => Some(s),
+            None => { Some(first_code_point.to_u32() as u16) }
+        }
+    }
+
+    /// Returns the last ill-formed UTF-16 digit in the string.
+    fn last_wide(&self) -> Option<u16> {
+        let last_code_point =
+            match CodePoint::from_iterator_reverse(&mut self.bytes.iter()) {
+                Some(cp) => cp,
+                None => return None
+            };
+
+        match last_code_point.to_surrogates() {
+            Some((_, s)) => Some(s),
+            None => { Some(last_code_point.to_u32() as u16) }
+        }
+    }
+
+    /// Returns true if the ill-formed UTF-16 data corresponding to
+    /// `needle` is a prefix of the data corresponding to `self`.
+    pub fn starts_with_wtf8(&self, needle: &Wtf8) -> bool {
+        // Try the easy case first
+        if self.bytes.starts_with(&needle.bytes) { return true; }
+
+        // Now we have to check if we're matching half a character at
+        // the end
+        let surrogate = match needle.final_lead_surrogate() {
+            Some(surrogate) => surrogate,
+            None => return false
+        };
+
+        // Surrogates are always 3 bytes
+        let start_len = needle.len() - 3;
+        if !self.bytes.starts_with(&needle.bytes[..start_len]) { return false; }
+
+        self[start_len..].first_wide() == Some(surrogate)
+    }
+
+    /// Returns true if the ill-formed UTF-16 data corresponding to
+    /// `needle` is a suffix of the data corresponding to `self`.
+    pub fn ends_with_wtf8(&self, needle: &Wtf8) -> bool {
+        // Try the easy case first
+        if self.bytes.ends_with(&needle.bytes) { return true; }
+
+        // Now we have to check if we're matching half a character at
+        // the begining
+        let surrogate = match needle.initial_trail_surrogate() {
+            Some(surrogate) => surrogate,
+            None => return false
+        };
+
+        // Surrogates are always 3 bytes
+        if !self.bytes.ends_with(&needle.bytes[3..]) { return false; }
+
+        let rest_len = self.len() - (needle.len() - 3);
+        self[..rest_len].last_wide() == Some(surrogate)
+    }
+
+    /// Returns true if the ill-formed UTF-16 data corresponding to
+    /// `needle` is contained in the data corresponding to `self`.
+    pub fn contains_wtf8(&self, needle: &Wtf8) -> bool {
+        // Try the easy case first
+        if SliceSearcher::new(&self.bytes, &needle.bytes).next().is_some() {
+            return true;
+        }
+
+        // Split the needle into an optional trail surrogate, other
+        // stuff, and an optional lead surrogate
+        let start = needle.initial_trail_surrogate();
+        let end = needle.final_lead_surrogate();
+        if start.is_none() && end.is_none() { return false; }
+        let middle = {
+            let start_offset = if start.is_some() { 3 } else { 0 };
+            let end_offset = if end.is_some() { 3 } else { 0 };
+            &needle[start_offset..needle.len() - end_offset]
+        };
+
+        if middle.is_empty() {
+            // We have no fixed bytes to match on.  We can't do
+            // anything but an exhaustive search.
+            match (start, end) {
+                (Some(start), Some(end)) => {
+                    let mut code_units = self.encode_wide().peekable();
+                    while code_units.any(|c| c == start) {
+                        if code_units.peek() == Some(&end) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                (Some(code_unit), None) | (None, Some(code_unit)) => {
+                    return self.encode_wide().any(|c| c == code_unit);
+                }
+                (None, None) => unreachable!()
+            }
+        }
+
+        let searcher = SliceSearcher::new(&self.bytes, &middle.bytes);
+        for middle_start in searcher {
+            let middle_end = middle_start + middle.len();
+            if (start.is_none() || self[..middle_start].last_wide() == start) &&
+               (end.is_none() || self[middle_end..].first_wide() == end) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// Returns true if the slice starts with the given `&str`.
     #[inline]
     pub fn starts_with_str(&self, prefix: &str) -> bool {
@@ -791,7 +942,7 @@ impl<'a> Iterator for Wtf8CodePoints<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<CodePoint> {
-        next_code_point(&mut self.bytes).map(|c| CodePoint { value: c })
+        CodePoint::from_iterator(&mut self.bytes)
     }
 
     #[inline]
@@ -959,6 +1110,42 @@ mod tests {
         assert_eq!(c(0x61).to_char_lossy(), 'a');
         assert_eq!(c(0x1F4A9).to_char_lossy(), '💩');
         assert_eq!(c(0xD800).to_char_lossy(), '\u{FFFD}');
+    }
+
+    #[test]
+    fn code_point_from_iterator() {
+        fn c(value: u32) -> CodePoint { CodePoint::from_u32(value).unwrap() }
+        assert_eq!(CodePoint::from_iterator(&mut [].iter()), None);
+        assert_eq!(CodePoint::from_iterator(&mut [0x20, 0x40].iter()),
+                   Some(c(0x20)));
+        assert_eq!(CodePoint::from_iterator(&mut [0xC2, 0xA2, 0x40].iter()),
+                   Some(c(0xA2)));
+        assert_eq!(CodePoint::from_iterator(&mut [0xED, 0xA0, 0xBD, 0x40].iter()),
+                   Some(c(0xD83D)));
+        assert_eq!(CodePoint::from_iterator(&mut [0xF0, 0x9F, 0x98, 0xBA].iter()),
+                   Some(c(0x1F63A)));
+    }
+
+    #[test]
+    fn code_point_from_iterator_reverse() {
+        fn c(value: u32) -> CodePoint { CodePoint::from_u32(value).unwrap() }
+        assert_eq!(CodePoint::from_iterator_reverse(&mut [].iter()), None);
+        assert_eq!(CodePoint::from_iterator_reverse(&mut [0x40, 0x20].iter()),
+                   Some(c(0x20)));
+        assert_eq!(CodePoint::from_iterator_reverse(&mut [0x40, 0xC2, 0xA2].iter()),
+                   Some(c(0xA2)));
+        assert_eq!(CodePoint::from_iterator_reverse(&mut [0x40, 0xED, 0xA0, 0xBD].iter()),
+                   Some(c(0xD83D)));
+        assert_eq!(CodePoint::from_iterator_reverse(&mut [0xF0, 0x9F, 0x98, 0xBA].iter()),
+                   Some(c(0x1F63A)));
+    }
+
+    #[test]
+    fn code_point_to_surrogates() {
+        fn c(value: u32) -> CodePoint { CodePoint::from_u32(value).unwrap() }
+        assert_eq!(c(0x20).to_surrogates(), None);
+        assert_eq!(c(0xD83D).to_surrogates(), None);
+        assert_eq!(c(0x1F63A).to_surrogates(), Some((0xD83D, 0xDE3A)));
     }
 
     #[test]
@@ -1295,6 +1482,251 @@ mod tests {
         string.push_char('💩');
         assert_eq!(string.encode_wide().collect::<Vec<_>>(),
                    vec![0x61, 0xE9, 0x20, 0xD83D, 0xD83D, 0xDCA9]);
+    }
+
+    fn from_cp(cp: u16) -> Wtf8Buf {
+        let mut x = Wtf8Buf::new();
+        x.push(CodePoint::from_u32(cp as u32).unwrap());
+        x
+    }
+
+    #[test]
+    fn wtf8_starts_with_wtf8() {
+        assert!(Wtf8::from_str("aé 💩").starts_with_wtf8(Wtf8::from_str("aé")));
+        assert!(Wtf8::from_str("aé 💩").starts_with_wtf8(Wtf8::from_str("aé 💩")));
+        assert!(Wtf8::from_str("aé 💩").starts_with_wtf8(Wtf8::from_str("")));
+        assert!(!Wtf8::from_str("aé 💩").starts_with_wtf8(Wtf8::from_str("é")));
+        assert!(Wtf8::from_str("").starts_with_wtf8(Wtf8::from_str("")));
+        assert!(!Wtf8::from_str("").starts_with_wtf8(Wtf8::from_str("a")));
+
+        fn check_surrogates(prefix: &Wtf8) {
+            let mut lead = prefix.to_owned();
+            lead.push_wtf8(&from_cp(0xD83D)[..]);
+            let mut other_lead = prefix.to_owned();
+            other_lead.push_wtf8(&from_cp(0xD83E)[..]);
+            let trail = from_cp(0xDE3A);
+            let mut full = lead.clone();
+            full.push_wtf8(&trail);
+            assert_eq!(full, { let mut x = prefix.to_owned(); x.push_str("😺"); x });
+
+            assert!(full.starts_with_wtf8(&full));
+            assert!(lead.starts_with_wtf8(&lead));
+            assert!(trail.starts_with_wtf8(&trail));
+            assert!(lead.starts_with_wtf8(prefix));
+            assert!(full.starts_with_wtf8(&lead));
+            assert!(!full.starts_with_wtf8(&trail));
+            assert!(!full.starts_with_wtf8(&other_lead));
+            assert!(!lead.starts_with_wtf8(&full));
+        }
+
+        check_surrogates(Wtf8::from_str(""));
+        check_surrogates(Wtf8::from_str("a"));
+        check_surrogates(&from_cp(0xD83D)[..]);
+    }
+
+    #[test]
+    fn wtf8_ends_with_wtf8() {
+        assert!(Wtf8::from_str("aé 💩").ends_with_wtf8(Wtf8::from_str(" 💩")));
+        assert!(Wtf8::from_str("aé 💩").ends_with_wtf8(Wtf8::from_str("aé 💩")));
+        assert!(Wtf8::from_str("aé 💩").ends_with_wtf8(Wtf8::from_str("")));
+        assert!(!Wtf8::from_str("aé 💩").ends_with_wtf8(Wtf8::from_str("é")));
+        assert!(Wtf8::from_str("").ends_with_wtf8(Wtf8::from_str("")));
+        assert!(!Wtf8::from_str("").ends_with_wtf8(Wtf8::from_str("a")));
+
+        fn check_surrogates(suffix: &Wtf8) {
+            let lead = from_cp(0xD83D);
+            let mut trail = from_cp(0xDE3A);
+            trail.push_wtf8(suffix);
+            let mut other_trail = from_cp(0xDE3B);
+            other_trail.push_wtf8(suffix);
+            let mut full = lead.clone();
+            full.push_wtf8(&trail);
+            assert_eq!(full, { let mut x = Wtf8Buf::from_str("😺"); x.push_wtf8(suffix); x });
+
+            assert!(full.ends_with_wtf8(&full));
+            assert!(lead.ends_with_wtf8(&lead));
+            assert!(trail.ends_with_wtf8(&trail));
+            assert!(trail.ends_with_wtf8(suffix));
+            assert!(full.ends_with_wtf8(&trail));
+            assert!(!full.ends_with_wtf8(&lead));
+            assert!(!full.ends_with_wtf8(&other_trail));
+            assert!(!trail.ends_with_wtf8(&full));
+        }
+
+        check_surrogates(Wtf8::from_str(""));
+        check_surrogates(Wtf8::from_str("a"));
+        check_surrogates(&from_cp(0xDE3A)[..]);
+    }
+
+    #[test]
+    fn wtf8_contains_wtf8() {
+        assert!(Wtf8::from_str("").contains_wtf8(Wtf8::from_str("")));
+        assert!(Wtf8::from_str("aé 💩").contains_wtf8(Wtf8::from_str("")));
+        assert!(Wtf8::from_str("aé 💩").contains_wtf8(Wtf8::from_str("aé 💩")));
+        assert!(!Wtf8::from_str("").contains_wtf8(Wtf8::from_str("aé 💩")));
+        assert!(Wtf8::from_str("aé 💩").contains_wtf8(Wtf8::from_str("aé")));
+        assert!(Wtf8::from_str("aé 💩").contains_wtf8(Wtf8::from_str("é ")));
+        assert!(Wtf8::from_str("aé 💩").contains_wtf8(Wtf8::from_str(" 💩")));
+
+        // Non UTF-8 cases
+        fn check(haystack: &[u16], needle: &[u16]) -> bool {
+            Wtf8Buf::from_wide(haystack).contains_wtf8(&Wtf8Buf::from_wide(needle)[..])
+        }
+
+        // No surrogates in needle
+        assert!( check(&[        0xD83D, 0xDE3A        ], &[0xD83D, 0xDE3A]));
+        assert!( check(&[0x0020, 0xD83D, 0xDE3A        ], &[0xD83D, 0xDE3A]));
+        assert!( check(&[0xD83D, 0xD83D, 0xDE3A        ], &[0xD83D, 0xDE3A]));
+        assert!( check(&[0xD83E, 0xD83D, 0xDE3A        ], &[0xD83D, 0xDE3A]));
+        assert!( check(&[0xDE3A, 0xD83D, 0xDE3A        ], &[0xD83D, 0xDE3A]));
+        assert!( check(&[0xDE3B, 0xD83D, 0xDE3A        ], &[0xD83D, 0xDE3A]));
+        assert!( check(&[        0xD83D, 0xDE3A, 0x0020], &[0xD83D, 0xDE3A]));
+        assert!( check(&[        0xD83D, 0xDE3A, 0xD83D], &[0xD83D, 0xDE3A]));
+        assert!( check(&[        0xD83D, 0xDE3A, 0xD83E], &[0xD83D, 0xDE3A]));
+        assert!( check(&[        0xD83D, 0xDE3A, 0xDE3A], &[0xD83D, 0xDE3A]));
+        assert!( check(&[        0xD83D, 0xDE3A, 0xDE3B], &[0xD83D, 0xDE3A]));
+        assert!(!check(&[        0xD83E, 0xDE3A        ], &[0xD83D, 0xDE3A]));
+        assert!(!check(&[        0xD83D, 0xDE3B        ], &[0xD83D, 0xDE3A]));
+        assert!(!check(&[        0xD83E, 0xDE3B        ], &[0xD83D, 0xDE3A]));
+        assert!(!check(&[        0xD83D                ], &[0xD83D, 0xDE3A]));
+        assert!(!check(&[                0xDE3A        ], &[0xD83D, 0xDE3A]));
+        assert!(!check(&[                              ], &[0xD83D, 0xDE3A]));
+
+        // needle is just a lead surrogate
+        assert!( check(&[        0xD83D        ], &[0xD83D]));
+        assert!( check(&[0x0020, 0xD83D        ], &[0xD83D]));
+        assert!( check(&[0xD83E, 0xD83D        ], &[0xD83D]));
+        assert!( check(&[0xDE3A, 0xD83D        ], &[0xD83D]));
+        assert!( check(&[        0xD83D, 0x0020], &[0xD83D]));
+        assert!( check(&[        0xD83D, 0xD83E], &[0xD83D]));
+        assert!( check(&[        0xD83D, 0xDE3A], &[0xD83D]));
+        assert!(!check(&[        0xD83E        ], &[0xD83D]));
+        assert!(!check(&[        0xDE3A        ], &[0xD83D]));
+        assert!(!check(&[        0xD83E, 0xDE3A], &[0xD83D]));
+        assert!(!check(&[                      ], &[0xD83D]));
+
+        // needle is just a trail surrogate
+        assert!( check(&[        0xDE3A        ], &[0xDE3A]));
+        assert!( check(&[0x0020, 0xDE3A        ], &[0xDE3A]));
+        assert!( check(&[0xD83D, 0xDE3A        ], &[0xDE3A]));
+        assert!( check(&[0xDE3B, 0xDE3A        ], &[0xDE3A]));
+        assert!( check(&[        0xDE3A, 0x0020], &[0xDE3A]));
+        assert!( check(&[        0xDE3A, 0xD83D], &[0xDE3A]));
+        assert!( check(&[        0xDE3A, 0xDE3B], &[0xDE3A]));
+        assert!(!check(&[        0xDE3B        ], &[0xDE3A]));
+        assert!(!check(&[        0xD83D        ], &[0xDE3A]));
+        assert!(!check(&[0xD83D, 0xDE3B        ], &[0xDE3A]));
+        assert!(!check(&[                      ], &[0xDE3A]));
+
+        // needle is a trail and lead surrogate
+        assert!( check(&[        0xDE3A, 0xD83D        ], &[0xDE3A, 0xD83D]));
+        assert!( check(&[0x0020, 0xDE3A, 0xD83D        ], &[0xDE3A, 0xD83D]));
+        assert!( check(&[0xD83D, 0xDE3A, 0xD83D        ], &[0xDE3A, 0xD83D]));
+        assert!( check(&[0xD83E, 0xDE3A, 0xD83D        ], &[0xDE3A, 0xD83D]));
+        assert!( check(&[0xDE3A, 0xDE3A, 0xD83D        ], &[0xDE3A, 0xD83D]));
+        assert!( check(&[0xDE3B, 0xDE3A, 0xD83D        ], &[0xDE3A, 0xD83D]));
+        assert!( check(&[        0xDE3A, 0xD83D, 0x0020], &[0xDE3A, 0xD83D]));
+        assert!( check(&[        0xDE3A, 0xD83D, 0xD83D], &[0xDE3A, 0xD83D]));
+        assert!( check(&[        0xDE3A, 0xD83D, 0xD83E], &[0xDE3A, 0xD83D]));
+        assert!( check(&[        0xDE3A, 0xD83D, 0xDE3A], &[0xDE3A, 0xD83D]));
+        assert!( check(&[        0xDE3A, 0xD83D, 0xDE3B], &[0xDE3A, 0xD83D]));
+        assert!( check(&[0xD83D, 0xDE3A, 0xD83D, 0xDE3A], &[0xDE3A, 0xD83D]));
+
+        assert!(!check(&[        0xDE3A, 0xD83E        ], &[0xDE3A, 0xD83D]));
+        assert!(!check(&[0xD83D, 0xDE3A, 0xD83E        ], &[0xDE3A, 0xD83D]));
+        assert!(!check(&[        0xDE3A, 0xD83E, 0xDE3A], &[0xDE3A, 0xD83D]));
+        assert!(!check(&[0xD83D, 0xDE3A, 0xD83E, 0xDE3A], &[0xDE3A, 0xD83D]));
+
+        assert!(!check(&[        0xDE3B, 0xD83D        ], &[0xDE3A, 0xD83D]));
+        assert!(!check(&[0xD83D, 0xDE3B, 0xD83D        ], &[0xDE3A, 0xD83D]));
+        assert!(!check(&[        0xDE3B, 0xD83D, 0xDE3A], &[0xDE3A, 0xD83D]));
+        assert!(!check(&[0xD83D, 0xDE3B, 0xD83D, 0xDE3A], &[0xDE3A, 0xD83D]));
+
+        assert!(!check(&[        0xDE3A                ], &[0xDE3A, 0xD83D]));
+        assert!(!check(&[                0xD83D        ], &[0xDE3A, 0xD83D]));
+        assert!(!check(&[                              ], &[0xDE3A, 0xD83D]));
+
+        // needle is a trail surrogate and other stuff
+        assert!( check(&[        0xDE3A, 0x0020        ], &[0xDE3A, 0x0020]));
+        assert!( check(&[0x0020, 0xDE3A, 0x0020        ], &[0xDE3A, 0x0020]));
+        assert!( check(&[0xD83D, 0xDE3A, 0x0020        ], &[0xDE3A, 0x0020]));
+        assert!( check(&[0xDE3A, 0xDE3A, 0x0020        ], &[0xDE3A, 0x0020]));
+        assert!( check(&[        0xDE3A, 0x0020, 0x0020], &[0xDE3A, 0x0020]));
+        assert!( check(&[        0xDE3A, 0x0020, 0xD83D], &[0xDE3A, 0x0020]));
+        assert!( check(&[        0xDE3A, 0x0020, 0xDE3A], &[0xDE3A, 0x0020]));
+        assert!( check(&[0xD83D, 0xDE3A, 0x0020, 0x0020], &[0xDE3A, 0x0020]));
+        assert!(!check(&[0xD83D, 0xDE3A, 0x0021        ], &[0xDE3A, 0x0020]));
+        assert!(!check(&[0xD83D, 0xDE3B, 0x0020        ], &[0xDE3A, 0x0020]));
+        assert!(!check(&[        0xDE3A                ], &[0xDE3A, 0x0020]));
+        assert!(!check(&[                0x0020        ], &[0xDE3A, 0x0020]));
+        assert!(!check(&[                              ], &[0xDE3A, 0x0020]));
+
+        assert!( check(&[        0xDE3A, 0xDE3A        ], &[0xDE3A, 0xDE3A]));
+        assert!( check(&[0x0020, 0xDE3A, 0xDE3A        ], &[0xDE3A, 0xDE3A]));
+        assert!( check(&[0xD83D, 0xDE3A, 0xDE3A        ], &[0xDE3A, 0xDE3A]));
+        assert!( check(&[0xDE3B, 0xDE3A, 0xDE3A        ], &[0xDE3A, 0xDE3A]));
+        assert!( check(&[        0xDE3A, 0xDE3A, 0x0020], &[0xDE3A, 0xDE3A]));
+        assert!( check(&[        0xDE3A, 0xDE3A, 0xD83D], &[0xDE3A, 0xDE3A]));
+        assert!( check(&[        0xDE3A, 0xDE3A, 0xDE3B], &[0xDE3A, 0xDE3A]));
+        assert!( check(&[0xD83D, 0xDE3A, 0xDE3A, 0xDE3B], &[0xDE3A, 0xDE3A]));
+        assert!(!check(&[0xD83D, 0xDE3A, 0xDE3B        ], &[0xDE3A, 0xDE3A]));
+        assert!(!check(&[0xD83D, 0xDE3B, 0xDE3A        ], &[0xDE3A, 0xDE3A]));
+        assert!(!check(&[        0xDE3A                ], &[0xDE3A, 0xDE3A]));
+        assert!(!check(&[                              ], &[0xDE3A, 0xDE3A]));
+
+        // needle is a other stuff and a lead surrogate
+        assert!( check(&[        0x0020, 0xD83D        ], &[0x0020, 0xD83D]));
+        assert!( check(&[0x0020, 0x0020, 0xD83D        ], &[0x0020, 0xD83D]));
+        assert!( check(&[0xD83D, 0x0020, 0xD83D        ], &[0x0020, 0xD83D]));
+        assert!( check(&[0xDE3A, 0x0020, 0xD83D        ], &[0x0020, 0xD83D]));
+        assert!( check(&[        0x0020, 0xD83D, 0x0020], &[0x0020, 0xD83D]));
+        assert!( check(&[        0x0020, 0xD83D, 0xD83D], &[0x0020, 0xD83D]));
+        assert!( check(&[        0x0020, 0xD83D, 0xDE3A], &[0x0020, 0xD83D]));
+        assert!( check(&[0x0020, 0x0020, 0xD83D, 0x0020], &[0x0020, 0xD83D]));
+        assert!(!check(&[        0x0020, 0xD83E, 0xDE3A], &[0x0020, 0xD83D]));
+        assert!(!check(&[        0x0021, 0xD83D, 0xDE3A], &[0x0020, 0xD83D]));
+        assert!(!check(&[        0x0020                ], &[0x0020, 0xD83D]));
+        assert!(!check(&[                0xD83D        ], &[0x0020, 0xD83D]));
+        assert!(!check(&[                              ], &[0x0020, 0xD83D]));
+
+        assert!( check(&[        0xD83D, 0xD83D        ], &[0xD83D, 0xD83D]));
+        assert!( check(&[0x0020, 0xD83D, 0xD83D        ], &[0xD83D, 0xD83D]));
+        assert!( check(&[0xD83E, 0xD83D, 0xD83D        ], &[0xD83D, 0xD83D]));
+        assert!( check(&[0xDE3A, 0xD83D, 0xD83D        ], &[0xD83D, 0xD83D]));
+        assert!( check(&[        0xD83D, 0xD83D, 0x0020], &[0xD83D, 0xD83D]));
+        assert!( check(&[        0xD83D, 0xD83D, 0xD83E], &[0xD83D, 0xD83D]));
+        assert!( check(&[        0xD83D, 0xD83D, 0xDE3A], &[0xD83D, 0xD83D]));
+        assert!( check(&[0xD83E, 0xD83D, 0xD83D, 0xDE3A], &[0xD83D, 0xD83D]));
+        assert!(!check(&[        0xD83D, 0xD83E, 0xDE3A], &[0xD83D, 0xD83D]));
+        assert!(!check(&[        0xD83E, 0xD83D, 0xDE3A], &[0xD83D, 0xD83D]));
+        assert!(!check(&[        0xD83D                ], &[0xD83D, 0xD83D]));
+        assert!(!check(&[                              ], &[0xD83D, 0xD83D]));
+
+        // needle is a trail surrogate, other stuff, and a lead surrogate
+        assert!( check(&[        0xDE3A, 0x0020, 0xD83D        ], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!( check(&[0x0020, 0xDE3A, 0x0020, 0xD83D        ], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!( check(&[0xD83D, 0xDE3A, 0x0020, 0xD83D        ], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!( check(&[0xDE3A, 0xDE3A, 0x0020, 0xD83D        ], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!( check(&[        0xDE3A, 0x0020, 0xD83D, 0x0020], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!( check(&[        0xDE3A, 0x0020, 0xD83D, 0xD83D], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!( check(&[        0xDE3A, 0x0020, 0xD83D, 0xDE3A], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!( check(&[0xD83D, 0xDE3A, 0x0020, 0xD83D, 0xDE3A], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!(!check(&[0xD83D, 0xDE3B, 0x0020, 0xD83D, 0xDE3A], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!(!check(&[0xD83D, 0xDE3A, 0x0021, 0xD83D, 0xDE3A], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!(!check(&[0xD83D, 0xDE3A, 0x0020, 0xD83E, 0xDE3A], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!(!check(&[        0xDE3A, 0x0020                ], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!(!check(&[        0xDE3A,         0xD83D        ], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!(!check(&[        0xDE3A,                       ], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!(!check(&[                0x0020, 0xD83D        ], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!(!check(&[                0x0020                ], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!(!check(&[                        0xD83D        ], &[0xDE3A, 0x0020, 0xD83D]));
+        assert!(!check(&[                                      ], &[0xDE3A, 0x0020, 0xD83D]));
+
+        // Non-surrogate part matches two overlapping times
+        assert!(check(&[0xD83D, 0xDE3A, 0xD83D, 0xDE3A, 0xD83D, 0xDE3A],
+                      &[        0xDE3A, 0xD83D, 0xDE3A, 0xD83D, 0xDE3A]));
+        assert!(check(&[0xD83D, 0xDE3A, 0xD83D, 0xDE3A, 0xD83D, 0xDE3A],
+                      &[0xD83D, 0xDE3A, 0xD83D, 0xDE3A, 0xD83D        ]));
     }
 
     #[test]

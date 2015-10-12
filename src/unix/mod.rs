@@ -11,6 +11,8 @@
 /// The underlying OsString/OsStr implementation on Unix systems: just
 /// a `Vec<u8>`/`[u8]`.
 
+use slice_searcher::SliceSearcher;
+
 use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use std::vec::Vec;
@@ -114,6 +116,18 @@ impl Slice {
 
     pub fn len(&self) -> usize {
         self.inner.len()
+    }
+
+    pub fn starts_with_os(&self, needle: &Slice) -> bool {
+        self.inner.starts_with(&needle.inner)
+    }
+
+    pub fn ends_with_os(&self, needle: &Slice) -> bool {
+        self.inner.ends_with(&needle.inner)
+    }
+
+    pub fn contains_os(&self, needle: &Slice) -> bool {
+        SliceSearcher::new(&self.inner, &needle.inner).next().is_some()
     }
 
     pub fn starts_with_str(&self, prefix: &str) -> bool {

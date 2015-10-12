@@ -117,6 +117,18 @@ impl Slice {
         self.inner.len()
     }
 
+    pub fn starts_with_os(&self, needle: &Slice) -> bool {
+        self.inner.starts_with_wtf8(&needle.inner)
+    }
+
+    pub fn ends_with_os(&self, needle: &Slice) -> bool {
+        self.inner.ends_with_wtf8(&needle.inner)
+    }
+
+    pub fn contains_os(&self, needle: &Slice) -> bool {
+        self.inner.contains_wtf8(&needle.inner)
+    }
+
     pub fn starts_with_str(&self, prefix: &str) -> bool {
         self.inner.starts_with_str(prefix)
     }
