@@ -119,16 +119,16 @@ impl Slice {
         self.inner.len()
     }
 
+    pub fn contains_os(&self, needle: &Slice) -> bool {
+        SliceSearcher::new(&self.inner, &needle.inner).next().is_some()
+    }
+
     pub fn starts_with_os(&self, needle: &Slice) -> bool {
         self.inner.starts_with(&needle.inner)
     }
 
     pub fn ends_with_os(&self, needle: &Slice) -> bool {
         self.inner.ends_with(&needle.inner)
-    }
-
-    pub fn contains_os(&self, needle: &Slice) -> bool {
-        SliceSearcher::new(&self.inner, &needle.inner).next().is_some()
     }
 
     pub fn utf8_sections<'a>(&'a self) -> Utf8Sections<'a> {

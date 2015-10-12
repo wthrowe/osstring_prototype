@@ -616,46 +616,6 @@ impl Wtf8 {
     }
 
     /// Returns true if the ill-formed UTF-16 data corresponding to
-    /// `needle` is a prefix of the data corresponding to `self`.
-    pub fn starts_with_wtf8(&self, needle: &Wtf8) -> bool {
-        // Try the easy case first
-        if self.bytes.starts_with(&needle.bytes) { return true; }
-
-        // Now we have to check if we're matching half a character at
-        // the end
-        let surrogate = match needle.final_lead_surrogate() {
-            Some(surrogate) => surrogate,
-            None => return false
-        };
-
-        // Surrogates are always 3 bytes
-        let start_len = needle.len() - 3;
-        if !self.bytes.starts_with(&needle.bytes[..start_len]) { return false; }
-
-        self[start_len..].first_wide() == Some(surrogate)
-    }
-
-    /// Returns true if the ill-formed UTF-16 data corresponding to
-    /// `needle` is a suffix of the data corresponding to `self`.
-    pub fn ends_with_wtf8(&self, needle: &Wtf8) -> bool {
-        // Try the easy case first
-        if self.bytes.ends_with(&needle.bytes) { return true; }
-
-        // Now we have to check if we're matching half a character at
-        // the begining
-        let surrogate = match needle.initial_trail_surrogate() {
-            Some(surrogate) => surrogate,
-            None => return false
-        };
-
-        // Surrogates are always 3 bytes
-        if !self.bytes.ends_with(&needle.bytes[3..]) { return false; }
-
-        let rest_len = self.len() - (needle.len() - 3);
-        self[..rest_len].last_wide() == Some(surrogate)
-    }
-
-    /// Returns true if the ill-formed UTF-16 data corresponding to
     /// `needle` is contained in the data corresponding to `self`.
     pub fn contains_wtf8(&self, needle: &Wtf8) -> bool {
         // Try the easy case first
@@ -703,6 +663,46 @@ impl Wtf8 {
             }
         }
         return false;
+    }
+
+    /// Returns true if the ill-formed UTF-16 data corresponding to
+    /// `needle` is a prefix of the data corresponding to `self`.
+    pub fn starts_with_wtf8(&self, needle: &Wtf8) -> bool {
+        // Try the easy case first
+        if self.bytes.starts_with(&needle.bytes) { return true; }
+
+        // Now we have to check if we're matching half a character at
+        // the end
+        let surrogate = match needle.final_lead_surrogate() {
+            Some(surrogate) => surrogate,
+            None => return false
+        };
+
+        // Surrogates are always 3 bytes
+        let start_len = needle.len() - 3;
+        if !self.bytes.starts_with(&needle.bytes[..start_len]) { return false; }
+
+        self[start_len..].first_wide() == Some(surrogate)
+    }
+
+    /// Returns true if the ill-formed UTF-16 data corresponding to
+    /// `needle` is a suffix of the data corresponding to `self`.
+    pub fn ends_with_wtf8(&self, needle: &Wtf8) -> bool {
+        // Try the easy case first
+        if self.bytes.ends_with(&needle.bytes) { return true; }
+
+        // Now we have to check if we're matching half a character at
+        // the begining
+        let surrogate = match needle.initial_trail_surrogate() {
+            Some(surrogate) => surrogate,
+            None => return false
+        };
+
+        // Surrogates are always 3 bytes
+        if !self.bytes.ends_with(&needle.bytes[3..]) { return false; }
+
+        let rest_len = self.len() - (needle.len() - 3);
+        self[..rest_len].last_wide() == Some(surrogate)
     }
 
     pub fn utf8_sections<'a>(&'a self) -> Utf8Sections<'a> {
@@ -1497,74 +1497,6 @@ mod tests {
     }
 
     #[test]
-    fn wtf8_starts_with_wtf8() {
-        assert!(Wtf8::from_str("aé 💩").starts_with_wtf8(Wtf8::from_str("aé")));
-        assert!(Wtf8::from_str("aé 💩").starts_with_wtf8(Wtf8::from_str("aé 💩")));
-        assert!(Wtf8::from_str("aé 💩").starts_with_wtf8(Wtf8::from_str("")));
-        assert!(!Wtf8::from_str("aé 💩").starts_with_wtf8(Wtf8::from_str("é")));
-        assert!(Wtf8::from_str("").starts_with_wtf8(Wtf8::from_str("")));
-        assert!(!Wtf8::from_str("").starts_with_wtf8(Wtf8::from_str("a")));
-
-        fn check_surrogates(prefix: &Wtf8) {
-            let mut lead = prefix.to_owned();
-            lead.push_wtf8(&from_cp(0xD83D)[..]);
-            let mut other_lead = prefix.to_owned();
-            other_lead.push_wtf8(&from_cp(0xD83E)[..]);
-            let trail = from_cp(0xDE3A);
-            let mut full = lead.clone();
-            full.push_wtf8(&trail);
-            assert_eq!(full, { let mut x = prefix.to_owned(); x.push_str("😺"); x });
-
-            assert!(full.starts_with_wtf8(&full));
-            assert!(lead.starts_with_wtf8(&lead));
-            assert!(trail.starts_with_wtf8(&trail));
-            assert!(lead.starts_with_wtf8(prefix));
-            assert!(full.starts_with_wtf8(&lead));
-            assert!(!full.starts_with_wtf8(&trail));
-            assert!(!full.starts_with_wtf8(&other_lead));
-            assert!(!lead.starts_with_wtf8(&full));
-        }
-
-        check_surrogates(Wtf8::from_str(""));
-        check_surrogates(Wtf8::from_str("a"));
-        check_surrogates(&from_cp(0xD83D)[..]);
-    }
-
-    #[test]
-    fn wtf8_ends_with_wtf8() {
-        assert!(Wtf8::from_str("aé 💩").ends_with_wtf8(Wtf8::from_str(" 💩")));
-        assert!(Wtf8::from_str("aé 💩").ends_with_wtf8(Wtf8::from_str("aé 💩")));
-        assert!(Wtf8::from_str("aé 💩").ends_with_wtf8(Wtf8::from_str("")));
-        assert!(!Wtf8::from_str("aé 💩").ends_with_wtf8(Wtf8::from_str("é")));
-        assert!(Wtf8::from_str("").ends_with_wtf8(Wtf8::from_str("")));
-        assert!(!Wtf8::from_str("").ends_with_wtf8(Wtf8::from_str("a")));
-
-        fn check_surrogates(suffix: &Wtf8) {
-            let lead = from_cp(0xD83D);
-            let mut trail = from_cp(0xDE3A);
-            trail.push_wtf8(suffix);
-            let mut other_trail = from_cp(0xDE3B);
-            other_trail.push_wtf8(suffix);
-            let mut full = lead.clone();
-            full.push_wtf8(&trail);
-            assert_eq!(full, { let mut x = Wtf8Buf::from_str("😺"); x.push_wtf8(suffix); x });
-
-            assert!(full.ends_with_wtf8(&full));
-            assert!(lead.ends_with_wtf8(&lead));
-            assert!(trail.ends_with_wtf8(&trail));
-            assert!(trail.ends_with_wtf8(suffix));
-            assert!(full.ends_with_wtf8(&trail));
-            assert!(!full.ends_with_wtf8(&lead));
-            assert!(!full.ends_with_wtf8(&other_trail));
-            assert!(!trail.ends_with_wtf8(&full));
-        }
-
-        check_surrogates(Wtf8::from_str(""));
-        check_surrogates(Wtf8::from_str("a"));
-        check_surrogates(&from_cp(0xDE3A)[..]);
-    }
-
-    #[test]
     fn wtf8_contains_wtf8() {
         assert!(Wtf8::from_str("").contains_wtf8(Wtf8::from_str("")));
         assert!(Wtf8::from_str("aé 💩").contains_wtf8(Wtf8::from_str("")));
@@ -1733,6 +1665,74 @@ mod tests {
                       &[        0xDE3A, 0xD83D, 0xDE3A, 0xD83D, 0xDE3A]));
         assert!(check(&[0xD83D, 0xDE3A, 0xD83D, 0xDE3A, 0xD83D, 0xDE3A],
                       &[0xD83D, 0xDE3A, 0xD83D, 0xDE3A, 0xD83D        ]));
+    }
+
+    #[test]
+    fn wtf8_starts_with_wtf8() {
+        assert!(Wtf8::from_str("aé 💩").starts_with_wtf8(Wtf8::from_str("aé")));
+        assert!(Wtf8::from_str("aé 💩").starts_with_wtf8(Wtf8::from_str("aé 💩")));
+        assert!(Wtf8::from_str("aé 💩").starts_with_wtf8(Wtf8::from_str("")));
+        assert!(!Wtf8::from_str("aé 💩").starts_with_wtf8(Wtf8::from_str("é")));
+        assert!(Wtf8::from_str("").starts_with_wtf8(Wtf8::from_str("")));
+        assert!(!Wtf8::from_str("").starts_with_wtf8(Wtf8::from_str("a")));
+
+        fn check_surrogates(prefix: &Wtf8) {
+            let mut lead = prefix.to_owned();
+            lead.push_wtf8(&from_cp(0xD83D)[..]);
+            let mut other_lead = prefix.to_owned();
+            other_lead.push_wtf8(&from_cp(0xD83E)[..]);
+            let trail = from_cp(0xDE3A);
+            let mut full = lead.clone();
+            full.push_wtf8(&trail);
+            assert_eq!(full, { let mut x = prefix.to_owned(); x.push_str("😺"); x });
+
+            assert!(full.starts_with_wtf8(&full));
+            assert!(lead.starts_with_wtf8(&lead));
+            assert!(trail.starts_with_wtf8(&trail));
+            assert!(lead.starts_with_wtf8(prefix));
+            assert!(full.starts_with_wtf8(&lead));
+            assert!(!full.starts_with_wtf8(&trail));
+            assert!(!full.starts_with_wtf8(&other_lead));
+            assert!(!lead.starts_with_wtf8(&full));
+        }
+
+        check_surrogates(Wtf8::from_str(""));
+        check_surrogates(Wtf8::from_str("a"));
+        check_surrogates(&from_cp(0xD83D)[..]);
+    }
+
+    #[test]
+    fn wtf8_ends_with_wtf8() {
+        assert!(Wtf8::from_str("aé 💩").ends_with_wtf8(Wtf8::from_str(" 💩")));
+        assert!(Wtf8::from_str("aé 💩").ends_with_wtf8(Wtf8::from_str("aé 💩")));
+        assert!(Wtf8::from_str("aé 💩").ends_with_wtf8(Wtf8::from_str("")));
+        assert!(!Wtf8::from_str("aé 💩").ends_with_wtf8(Wtf8::from_str("é")));
+        assert!(Wtf8::from_str("").ends_with_wtf8(Wtf8::from_str("")));
+        assert!(!Wtf8::from_str("").ends_with_wtf8(Wtf8::from_str("a")));
+
+        fn check_surrogates(suffix: &Wtf8) {
+            let lead = from_cp(0xD83D);
+            let mut trail = from_cp(0xDE3A);
+            trail.push_wtf8(suffix);
+            let mut other_trail = from_cp(0xDE3B);
+            other_trail.push_wtf8(suffix);
+            let mut full = lead.clone();
+            full.push_wtf8(&trail);
+            assert_eq!(full, { let mut x = Wtf8Buf::from_str("😺"); x.push_wtf8(suffix); x });
+
+            assert!(full.ends_with_wtf8(&full));
+            assert!(lead.ends_with_wtf8(&lead));
+            assert!(trail.ends_with_wtf8(&trail));
+            assert!(trail.ends_with_wtf8(suffix));
+            assert!(full.ends_with_wtf8(&trail));
+            assert!(!full.ends_with_wtf8(&lead));
+            assert!(!full.ends_with_wtf8(&other_trail));
+            assert!(!trail.ends_with_wtf8(&full));
+        }
+
+        check_surrogates(Wtf8::from_str(""));
+        check_surrogates(Wtf8::from_str("a"));
+        check_surrogates(&from_cp(0xDE3A)[..]);
     }
 
     #[test]

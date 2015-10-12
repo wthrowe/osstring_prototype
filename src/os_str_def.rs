@@ -334,6 +334,11 @@ impl OsStr {
         unsafe { mem::transmute(&self.inner) }
     }
 
+    /// Returns true if `needle` is a substring of `self`.
+    pub fn contains_os<S: AsRef<OsStr>>(&self, needle: S) -> bool {
+        self.inner.contains_os(&needle.as_ref().inner)
+    }
+
     /// Returns true if `needle` is a prefix of `self`.
     pub fn starts_with_os<S: AsRef<OsStr>>(&self, needle: S) -> bool {
         self.inner.starts_with_os(&needle.as_ref().inner)
@@ -342,11 +347,6 @@ impl OsStr {
     /// Returns true if `needle` is a suffix of `self`.
     pub fn ends_with_os<S: AsRef<OsStr>>(&self, needle: S) -> bool {
         self.inner.ends_with_os(&needle.as_ref().inner)
-    }
-
-    /// Returns true if `needle` is a substring of `self`.
-    pub fn contains_os<S: AsRef<OsStr>>(&self, needle: S) -> bool {
-        self.inner.contains_os(&needle.as_ref().inner)
     }
 
     pub fn contains<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a> + Clone {
@@ -731,6 +731,38 @@ mod tests {
     }
 
     #[test]
+    fn osstr_contains_os() {
+        assert!(OsStr::new("").contains_os(""));
+        assert!(OsStr::new("aé 💩").contains_os(""));
+        assert!(OsStr::new("aé 💩").contains_os("aé"));
+        assert!(OsStr::new("aé 💩").contains_os("é "));
+        assert!(OsStr::new("aé 💩").contains_os(" 💩"));
+        assert!(OsStr::new("aé 💩").contains_os("aé 💩"));
+        assert!(!OsStr::new("aé 💩").contains_os("b"));
+        assert!(!OsStr::new("").contains_os("a"));
+
+        let (start, end) = split_char();
+        let mut full = start.to_owned();
+        full.push(&end);
+        assert!(start.to_str().is_none() && end.to_str().is_none() && full.to_str().is_some());
+        assert!(!OsStr::new("").contains_os(&start));
+        assert!(!OsStr::new("").contains_os(&end));
+
+        assert!(start.contains_os(""));
+        assert!(start.contains_os(&start));
+        assert!(!start.contains_os(&end));
+        assert!(!start.contains_os(&full));
+        assert!(end.contains_os(""));
+        assert!(!end.contains_os(&start));
+        assert!(end.contains_os(&end));
+        assert!(!end.contains_os(&full));
+        assert!(full.contains_os(""));
+        assert!(full.contains_os(&start));
+        assert!(full.contains_os(&end));
+        assert!(full.contains_os(&full));
+    }
+
+    #[test]
     fn osstr_starts_with_os() {
         assert!(OsStr::new("").starts_with_os(""));
         assert!(OsStr::new("aé 💩").starts_with_os(""));
@@ -788,38 +820,6 @@ mod tests {
         assert!(!full.ends_with_os(&start));
         assert!(full.ends_with_os(&end));
         assert!(full.ends_with_os(&full));
-    }
-
-    #[test]
-    fn osstr_contains_os() {
-        assert!(OsStr::new("").contains_os(""));
-        assert!(OsStr::new("aé 💩").contains_os(""));
-        assert!(OsStr::new("aé 💩").contains_os("aé"));
-        assert!(OsStr::new("aé 💩").contains_os("é "));
-        assert!(OsStr::new("aé 💩").contains_os(" 💩"));
-        assert!(OsStr::new("aé 💩").contains_os("aé 💩"));
-        assert!(!OsStr::new("aé 💩").contains_os("b"));
-        assert!(!OsStr::new("").contains_os("a"));
-
-        let (start, end) = split_char();
-        let mut full = start.to_owned();
-        full.push(&end);
-        assert!(start.to_str().is_none() && end.to_str().is_none() && full.to_str().is_some());
-        assert!(!OsStr::new("").contains_os(&start));
-        assert!(!OsStr::new("").contains_os(&end));
-
-        assert!(start.contains_os(""));
-        assert!(start.contains_os(&start));
-        assert!(!start.contains_os(&end));
-        assert!(!start.contains_os(&full));
-        assert!(end.contains_os(""));
-        assert!(!end.contains_os(&start));
-        assert!(end.contains_os(&end));
-        assert!(!end.contains_os(&full));
-        assert!(full.contains_os(""));
-        assert!(full.contains_os(&start));
-        assert!(full.contains_os(&end));
-        assert!(full.contains_os(&full));
     }
 
     #[test]
