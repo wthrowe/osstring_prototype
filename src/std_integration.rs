@@ -2,6 +2,7 @@ use std::prelude::v1::*;
 use std::borrow::Borrow;
 use std::ffi;
 use std::mem;
+use std::str::pattern::{Pattern, ReverseSearcher};
 
 use os_str;
 use slice_concat_ext::LocalSliceConcatExt;
@@ -53,6 +54,13 @@ impl OsStringPrototyping for ffi::OsString {
 pub trait OsStrPrototyping {
     fn is_empty(&self) -> bool;
     fn len(&self) -> usize;
+    fn contains_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool;
+    fn starts_with_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool;
+    fn ends_with_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool;
+    fn contains<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a> + Clone;
+    fn starts_with<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a>;
+    fn ends_with<'a, P>(&'a self, pat: P) -> bool
+        where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a>;
     fn starts_with_str(&self, prefix: &str) -> bool;
     fn remove_prefix_str(&self, prefix: &str) -> Option<&Self>;
     fn slice_shift_char(&self) -> Option<(char, &Self)>;
@@ -66,6 +74,25 @@ impl OsStrPrototyping for ffi::OsStr {
     }
     fn len(&self) -> usize {
         <&os_str::OsStr>::from(self).len()
+    }
+    fn contains_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool {
+        <&os_str::OsStr>::from(self).contains_os(<&os_str::OsStr>::from(needle.as_ref()))
+    }
+    fn starts_with_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool {
+        <&os_str::OsStr>::from(self).starts_with_os(<&os_str::OsStr>::from(needle.as_ref()))
+    }
+    fn ends_with_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool {
+        <&os_str::OsStr>::from(self).ends_with_os(<&os_str::OsStr>::from(needle.as_ref()))
+    }
+    fn contains<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a> + Clone {
+        <&os_str::OsStr>::from(self).contains(pat)
+    }
+    fn starts_with<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a> {
+        <&os_str::OsStr>::from(self).starts_with(pat)
+    }
+    fn ends_with<'a, P>(&'a self, pat: P) -> bool
+        where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
+        <&os_str::OsStr>::from(self).ends_with(pat)
     }
     fn starts_with_str(&self, prefix: &str) -> bool {
         <&os_str::OsStr>::from(self).starts_with_str(prefix)
@@ -138,6 +165,12 @@ mod tests {
         let string = OsString::from("hello");
         assert!(!string.is_empty());
         assert_eq!(string.len(), 5);
+        assert!(string.contains_os(OsStr::new("ll")));
+        assert!(string.starts_with_os(OsStr::new("he")));
+        assert!(string.ends_with_os(OsStr::new("lo")));
+        assert!(string.contains("ll"));
+        assert!(string.starts_with("he"));
+        assert!(string.ends_with("lo"));
         assert!(string.starts_with_str("he"));
         assert_eq!(string.remove_prefix_str("he"), Some(OsStr::new("llo")));
         assert_eq!(string.slice_shift_char(), Some(('h', OsStr::new("ello"))));
