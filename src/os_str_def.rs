@@ -354,13 +354,12 @@ impl OsStr {
     }
 
     pub fn starts_with<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a> {
-        self.inner.utf8_sections().nth(0).unwrap().starts_with(pat)
+        self.inner.utf8_sections().next().unwrap().starts_with(pat)
     }
 
     pub fn ends_with<'a, P>(&'a self, pat: P) -> bool
             where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
-        // FIXME: Can we avoid scanning the whole string?
-        self.inner.utf8_sections().last().unwrap().ends_with(pat)
+        self.inner.utf8_sections().next_back().unwrap().ends_with(pat)
     }
 
     /// Returns true if the string starts with a valid UTF-8 sequence
