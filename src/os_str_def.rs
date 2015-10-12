@@ -349,14 +349,23 @@ impl OsStr {
         self.inner.ends_with_os(&needle.as_ref().inner)
     }
 
+    /// Returns true if `self` matches `pat`.
+    ///
+    /// Note that patterns can only match UTF-8 sections of the `OsStr`.
     pub fn contains<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a> + Clone {
         self.inner.utf8_sections().any(|s| s.contains(pat.clone()))
     }
 
+    /// Returns true if the beginning of `self` matches `pat`.
+    ///
+    /// Note that patterns can only match UTF-8 sections of the `OsStr`.
     pub fn starts_with<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a> {
         self.inner.utf8_sections().next().unwrap().starts_with(pat)
     }
 
+    /// Returns true if the end of `self` matches `pat`.
+    ///
+    /// Note that patterns can only match UTF-8 sections of the `OsStr`.
     pub fn ends_with<'a, P>(&'a self, pat: P) -> bool
             where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
         self.inner.utf8_sections().next_back().unwrap().ends_with(pat)
