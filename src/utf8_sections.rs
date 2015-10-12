@@ -42,31 +42,31 @@ impl<'a> Utf8Sections<'a> {
 }
 
 impl<'a> Iterator for Utf8Sections<'a> {
-    type Item = &'a str;
+    type Item = (usize, &'a str);
 
-    fn next(&mut self) -> Option<&'a str> {
+    fn next(&mut self) -> Option<(usize, &'a str)> {
         loop {
             if self.start > self.end { return None; }
             // Empty string at the end
             if self.start == self.slice.len() {
                 self.start += 1;
-                return Some("");
+                return Some((self.slice.len(), ""));
             }
 
             let str_start = self.start;
             let string = self.make_string_from(str_start);
             self.start += string.len() + 1;
             if !string.is_empty() {
-                return Some(string);
+                return Some((str_start, string));
             }
             // Empty string at the beginning
-            if str_start == 0 { return Some(""); }
+            if str_start == 0 { return Some((0, "")); }
         }
     }
 }
 
 impl<'a> DoubleEndedIterator for Utf8Sections<'a> {
-    fn next_back(&mut self) -> Option<&'a str> {
+    fn next_back(&mut self) -> Option<(usize, &'a str)> {
         // Search backwards until we find a character
         loop {
             if self.end < self.start { return None; }
@@ -83,7 +83,7 @@ impl<'a> DoubleEndedIterator for Utf8Sections<'a> {
             // Empty string at the beginning
             if self.end == 0 {
                 self.start = 1;
-                return Some("");
+                return Some((0, ""));
             }
             self.end -= 1;
         }
@@ -109,7 +109,7 @@ impl<'a> DoubleEndedIterator for Utf8Sections<'a> {
             }
         }
         self.end = char_end.checked_sub(1).unwrap_or_else(|| { self.start = 1; 0 });
-        return Some(self.make_string_from(char_end));
+        return Some((char_end, self.make_string_from(char_end)));
     }
 }
 
@@ -121,25 +121,25 @@ mod tests {
     #[test]
     fn forward_single() {
         assert_eq!(Utf8Sections::new("aé 💩".as_bytes()).collect::<Vec<_>>(),
-                   ["aé 💩"]);
+                   [(0, "aé 💩")]);
     }
 
     #[test]
     fn backward_single() {
         assert_eq!(Utf8Sections::new("aé 💩".as_bytes()).rev().collect::<Vec<_>>(),
-                   ["aé 💩"]);
+                   [(0, "aé 💩")]);
     }
 
     #[test]
     fn forward_empty() {
         assert_eq!(Utf8Sections::new(b"").collect::<Vec<_>>(),
-                   [""]);
+                   [(0, "")]);
     }
 
     #[test]
     fn backward_empty() {
         assert_eq!(Utf8Sections::new(b"").rev().collect::<Vec<_>>(),
-                   [""]);
+                   [(0, "")]);
     }
 
     #[test]
@@ -148,12 +148,12 @@ mod tests {
                                        0xFF,
                                        0xCE, 0x93])
                    .collect::<Vec<_>>(),
-                   ["😺", "Γ"]);
+                   [(0, "😺"), (5, "Γ")]);
         assert_eq!(Utf8Sections::new(&[0xF0, 0x9F, 0x98, 0xBA,
                                        0xFF, 0xFF,
                                        0xCE, 0x93])
                    .collect::<Vec<_>>(),
-                   ["😺", "Γ"]);
+                   [(0, "😺"), (6, "Γ")]);
     }
 
     #[test]
@@ -162,28 +162,28 @@ mod tests {
                                        0xFF,
                                        0xCE, 0x93])
                    .rev().collect::<Vec<_>>(),
-                   ["Γ", "😺"]);
+                   [(5, "Γ"), (0, "😺")]);
         assert_eq!(Utf8Sections::new(&[0xF0, 0x9F, 0x98, 0xBA,
                                        0xFF, 0xFF,
                                        0xCE, 0x93])
                    .rev().collect::<Vec<_>>(),
-                   ["Γ", "😺"]);
+                   [(6, "Γ"), (0, "😺")]);
     }
 
     #[test]
     fn forward_multiple_empty() {
         assert_eq!(Utf8Sections::new(&[0xFF]).collect::<Vec<_>>(),
-                   ["", ""]);
+                   [(0, ""), (1, "")]);
         assert_eq!(Utf8Sections::new(&[0xFF, 0xFF]).collect::<Vec<_>>(),
-                   ["", ""]);
+                   [(0, ""), (2, "")]);
     }
 
     #[test]
     fn backward_multiple_empty() {
         assert_eq!(Utf8Sections::new(&[0xFF]).rev().collect::<Vec<_>>(),
-                   ["", ""]);
+                   [(1, ""), (0, "")]);
         assert_eq!(Utf8Sections::new(&[0xFF, 0xFF]).rev().collect::<Vec<_>>(),
-                   ["", ""]);
+                   [(2, ""), (0, "")]);
     }
 
     #[test]
@@ -192,7 +192,7 @@ mod tests {
                                        0xF0, 0x9F, 0x98,
                                        0xCE, 0x93])
                    .collect::<Vec<_>>(),
-                   ["😺", "Γ"]);
+                   [(0, "😺"), (7, "Γ")]);
     }
 
     #[test]
@@ -201,45 +201,45 @@ mod tests {
                                        0xF0, 0x9F, 0x98,
                                        0xCE, 0x93])
                    .rev().collect::<Vec<_>>(),
-                   ["Γ", "😺"]);
+                   [(7, "Γ"), (0, "😺")]);
     }
 
     #[test]
     fn bidirectional_empties() {
         let buf = [0xFF];
         let mut sections = Utf8Sections::new(&buf);
-        assert_eq!(sections.next(), Some(""));
-        assert_eq!(sections.next_back(), Some(""));
+        assert_eq!(sections.next(), Some((0, "")));
+        assert_eq!(sections.next_back(), Some((1, "")));
         assert_eq!(sections.next_back(), None);
 
         let buf = [0xFF, 0xFF];
         let mut sections = Utf8Sections::new(&buf);
-        assert_eq!(sections.next(), Some(""));
-        assert_eq!(sections.next_back(), Some(""));
+        assert_eq!(sections.next(), Some((0, "")));
+        assert_eq!(sections.next_back(), Some((2, "")));
         assert_eq!(sections.next_back(), None);
 
         let buf = [0xFF, 0xFF, 0xFF];
         let mut sections = Utf8Sections::new(&buf);
-        assert_eq!(sections.next(), Some(""));
-        assert_eq!(sections.next_back(), Some(""));
+        assert_eq!(sections.next(), Some((0, "")));
+        assert_eq!(sections.next_back(), Some((3, "")));
         assert_eq!(sections.next_back(), None);
 
         let buf = [0xFF];
         let mut sections = Utf8Sections::new(&buf);
-        assert_eq!(sections.next_back(), Some(""));
-        assert_eq!(sections.next(), Some(""));
+        assert_eq!(sections.next_back(), Some((1, "")));
+        assert_eq!(sections.next(), Some((0, "")));
         assert_eq!(sections.next(), None);
 
         let buf = [0xFF, 0xFF];
         let mut sections = Utf8Sections::new(&buf);
-        assert_eq!(sections.next_back(), Some(""));
-        assert_eq!(sections.next(), Some(""));
+        assert_eq!(sections.next_back(), Some((2, "")));
+        assert_eq!(sections.next(), Some((0, "")));
         assert_eq!(sections.next(), None);
 
         let buf = [0xFF, 0xFF, 0xFF];
         let mut sections = Utf8Sections::new(&buf);
-        assert_eq!(sections.next_back(), Some(""));
-        assert_eq!(sections.next(), Some(""));
+        assert_eq!(sections.next_back(), Some((3, "")));
+        assert_eq!(sections.next(), Some((0, "")));
         assert_eq!(sections.next(), None);
     }
 
@@ -251,13 +251,13 @@ mod tests {
                    0xCE, 0x93,
                    0x23];
         let mut sections = Utf8Sections::new(&buf);
-        assert_eq!(sections.next(), Some("😺 "));
-        assert_eq!(sections.next_back(), Some("Γ#"));
+        assert_eq!(sections.next(), Some((0, "😺 ")));
+        assert_eq!(sections.next_back(), Some((6, "Γ#")));
         assert_eq!(sections.next_back(), None);
 
         let mut sections = Utf8Sections::new(&buf);
-        assert_eq!(sections.next_back(), Some("Γ#"));
-        assert_eq!(sections.next(), Some("😺 "));
+        assert_eq!(sections.next_back(), Some((6, "Γ#")));
+        assert_eq!(sections.next(), Some((0, "😺 ")));
         assert_eq!(sections.next(), None);
     }
 }
