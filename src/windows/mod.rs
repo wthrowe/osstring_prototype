@@ -16,7 +16,7 @@ use utf8_sections::Utf8Sections;
 use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use wtf8::{self, Wtf8, Wtf8Buf};
-use core::str::pattern::Pattern;
+use core::str::pattern::{DoubleEndedSearcher, Pattern};
 use std::string::String;
 use std::result::Result;
 use std::option::Option;
@@ -166,6 +166,13 @@ impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
 
     fn next(&mut self) -> Option<&'a Slice> {
         self.inner.next().map(Slice::from_wtf8)
+    }
+}
+
+impl<'a, P> DoubleEndedIterator for Split<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+    fn next_back(&mut self) -> Option<&'a Slice> {
+        self.inner.next_back().map(Slice::from_wtf8)
     }
 }
 

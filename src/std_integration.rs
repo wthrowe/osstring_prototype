@@ -2,7 +2,7 @@ use std::prelude::v1::*;
 use std::borrow::Borrow;
 use std::ffi;
 use std::mem;
-use std::str::pattern::{Pattern, ReverseSearcher};
+use std::str::pattern::{DoubleEndedSearcher, Pattern, ReverseSearcher};
 
 use os_str;
 use slice_concat_ext::LocalSliceConcatExt;
@@ -130,6 +130,13 @@ impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
 
     fn next(&mut self) -> Option<&'a ffi::OsStr> {
         self.inner.next().map(|x| x.into())
+    }
+}
+
+impl<'a, P> DoubleEndedIterator for Split<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+    fn next_back(&mut self) -> Option<&'a ffi::OsStr> {
+        self.inner.next_back().map(|x| x.into())
     }
 }
 

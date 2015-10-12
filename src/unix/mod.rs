@@ -19,7 +19,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use std::vec::Vec;
 use std::str;
-use core::str::pattern::Pattern;
+use core::str::pattern::{DoubleEndedSearcher, Pattern};
 use std::string::String;
 use std::mem;
 
@@ -181,6 +181,13 @@ impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
 
     fn next(&mut self) -> Option<&'a Slice> {
         self.inner.next().map(Slice::from_u8_slice)
+    }
+}
+
+impl<'a, P> DoubleEndedIterator for Split<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+    fn next_back(&mut self) -> Option<&'a Slice> {
+        self.inner.next_back().map(Slice::from_u8_slice)
     }
 }
 

@@ -35,7 +35,7 @@
 // //! for conversion to/from various other string types. Eventually these types
 // //! will offer a full-fledged string API.
 
-use core::str::pattern::{Pattern, ReverseSearcher};
+use core::str::pattern::{DoubleEndedSearcher, Pattern, ReverseSearcher};
 
 use std::borrow::{Borrow, Cow, ToOwned};
 use std::ffi::CString;
@@ -533,6 +533,13 @@ impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
     }
 }
 
+impl<'a, P> DoubleEndedIterator for Split<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+    fn next_back(&mut self) -> Option<&'a OsStr> {
+        self.inner.next_back().map(|s| OsStr::from_inner(s))
+    }
+}
+
 impl<S: Borrow<OsStr>> LocalSliceConcatExt<OsStr> for [S] {
     type Output = OsString;
 
@@ -895,6 +902,34 @@ mod tests {
         string.push("aΓ");
         assert_eq!(string.split("aΓ").collect::<Vec<_>>(),
                    [&part1[..], &part2[..], &part3[..], OsStr::new("")]);
+    }
+
+    #[test]
+    fn osstr_split_double_ended() {
+        assert_eq!(OsStr::new("").split('a').rev().collect::<Vec<_>>(), [OsStr::new("")]);
+
+        let part1 = non_utf8_osstring();
+        let mut part2 = non_utf8_osstring();
+        part2.push("aé 💩");
+        let part3 = OsString::from("aé 💩");
+        let mut string = part1.clone();
+        string.push("Γ");
+        string.push(&part2);
+        string.push("Γ");
+        string.push(&part3);
+        string.push("Γ");
+        let mut split = string.split('Γ');
+        assert_eq!(split.next_back(), Some(OsStr::new("")));
+        assert_eq!(split.next(), Some(&part1[..]));
+        assert_eq!(split.next_back(), Some(&part3[..]));
+        assert_eq!(split.next(), Some(&part2[..]));
+        assert_eq!(split.next_back(), None);
+        let mut split = string.split('Γ');
+        assert_eq!(split.next(), Some(&part1[..]));
+        assert_eq!(split.next_back(), Some(OsStr::new("")));
+        assert_eq!(split.next(), Some(&part2[..]));
+        assert_eq!(split.next_back(), Some(&part3[..]));
+        assert_eq!(split.next(), None);
     }
 
     #[test]

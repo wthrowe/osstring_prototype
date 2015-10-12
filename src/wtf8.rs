@@ -44,7 +44,7 @@ use std::mem;
 use std::ops;
 use std::slice;
 use std::str;
-use core::str::pattern::Pattern;
+use core::str::pattern::{DoubleEndedSearcher, Pattern};
 use std::string::String;
 //use std::sys_common::AsInner;
 use std::vec::Vec;
@@ -1045,6 +1045,13 @@ impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
 
     fn next(&mut self) -> Option<&'a Wtf8> {
         self.inner.next().map(|s| unsafe { Wtf8::from_bytes_unchecked(s) })
+    }
+}
+
+impl<'a, P> DoubleEndedIterator for Split<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+    fn next_back(&mut self) -> Option<&'a Wtf8> {
+        self.inner.next_back().map(|s| unsafe { Wtf8::from_bytes_unchecked(s) })
     }
 }
 
