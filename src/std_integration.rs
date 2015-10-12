@@ -61,11 +61,11 @@ pub trait OsStrPrototyping {
     fn starts_with<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a>;
     fn ends_with<'a, P>(&'a self, pat: P) -> bool
         where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a>;
+    fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a> + Clone;
     fn starts_with_str(&self, prefix: &str) -> bool;
     fn remove_prefix_str(&self, prefix: &str) -> Option<&Self>;
     fn slice_shift_char(&self) -> Option<(char, &Self)>;
     fn split_off_str(&self, boundary: char) -> Option<(&str, &Self)>;
-    fn split<'a>(&'a self, boundary: char) -> Split<'a>;
 }
 
 impl OsStrPrototyping for ffi::OsStr {
@@ -94,6 +94,9 @@ impl OsStrPrototyping for ffi::OsStr {
         where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
         <&os_str::OsStr>::from(self).ends_with(pat)
     }
+    fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a> + Clone {
+        <&os_str::OsStr>::from(self).split(pat).into()
+    }
     fn starts_with_str(&self, prefix: &str) -> bool {
         <&os_str::OsStr>::from(self).starts_with_str(prefix)
     }
@@ -106,22 +109,19 @@ impl OsStrPrototyping for ffi::OsStr {
     fn split_off_str(&self, boundary: char) -> Option<(&str, &Self)> {
         <&os_str::OsStr>::from(self).split_off_str(boundary).map(|(a, b)| (a, b.into()))
     }
-    fn split<'a>(&'a self, boundary: char) -> Split<'a> {
-        <&'a os_str::OsStr>::from(self).split(boundary).into()
-    }
 }
 
-pub struct Split<'a> {
-    inner: os_str::Split<'a>
+pub struct Split<'a, P> where P: Pattern<'a> {
+    inner: os_str::Split<'a, P>
 }
 
-impl<'a> From<os_str::Split<'a>> for Split<'a> {
-    fn from(x: os_str::Split<'a>) -> Split<'a> {
+impl<'a, P> From<os_str::Split<'a, P>> for Split<'a, P> where P: Pattern<'a> + Clone {
+    fn from(x: os_str::Split<'a, P>) -> Split<'a, P> {
         Split { inner: x }
     }
 }
 
-impl<'a> Iterator for Split<'a> {
+impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
     type Item = &'a ffi::OsStr;
 
     fn next(&mut self) -> Option<&'a ffi::OsStr> {
@@ -171,6 +171,7 @@ mod tests {
         assert!(string.contains("ll"));
         assert!(string.starts_with("he"));
         assert!(string.ends_with("lo"));
+        assert_eq!(string.split('l').collect::<Vec<_>>(), ["he", "", "o"]);
         assert!(string.starts_with_str("he"));
         assert_eq!(string.remove_prefix_str("he"), Some(OsStr::new("llo")));
         assert_eq!(string.slice_shift_char(), Some(('h', OsStr::new("ello"))));

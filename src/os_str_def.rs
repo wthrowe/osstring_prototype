@@ -65,11 +65,6 @@ pub struct OsStr {
     inner: Slice
 }
 
-/// Iterator over parts of an OS string.
-pub struct Split<'a> {
-    inner: ImplSplit<'a>
-}
-
 impl OsString {
     /// Constructs a new empty `OsString`.
     pub fn new() -> OsString {
@@ -371,6 +366,14 @@ impl OsStr {
         self.inner.utf8_sections().next_back().unwrap().1.ends_with(pat)
     }
 
+    /// An iterator over substrings of `self`, separated by characters
+    /// matched by a pattern.  See `str::split` for details.
+    ///
+    /// Note that patterns can only match UTF-8 sections of the `OsStr`.
+    pub fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a> + Clone {
+        Split { inner: self.inner.split(pat) }
+    }
+
     /// Returns true if the string starts with a valid UTF-8 sequence
     /// equal to the given `&str`.
     pub fn starts_with_str(&self, prefix: &str) -> bool {
@@ -396,19 +399,6 @@ impl OsStr {
     /// character.  Otherwise returns `None`.
     pub fn split_off_str(&self, boundary: char) -> Option<(&str, &OsStr)> {
         self.inner.split_off_str(boundary).map(|(a, b)| (a, Self::from_inner(b)))
-    }
-
-    /// Returns an iterator over sections of the `OsStr` separated by
-    /// the given character.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the boundary character is not ASCII.
-    pub fn split<'a>(&'a self, boundary: char) -> Split<'a> {
-        assert!(boundary < 128 as char, "boundary not ASCII");
-        Split {
-            inner: self.inner.split_ascii(boundary as u8)
-        }
     }
 }
 
@@ -526,7 +516,12 @@ impl AsInner<Slice> for OsStr {
     }
 }
 
-impl<'a> Iterator for Split<'a> {
+/// Iterator over parts of an OS string.
+pub struct Split<'a, P> where P: Pattern<'a> {
+    inner: ImplSplit<'a, P>
+}
+
+impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
     type Item = &'a OsStr;
 
     fn next(&mut self) -> Option<&'a OsStr> {
@@ -881,6 +876,24 @@ mod tests {
     }
 
     #[test]
+    fn osstr_split() {
+        assert_eq!(OsStr::new("").split('a').collect::<Vec<_>>(), [OsStr::new("")]);
+
+        let part1 = non_utf8_osstring();
+        let mut part2 = non_utf8_osstring();
+        part2.push("aé 💩");
+        let part3 = OsString::from("aé 💩");
+        let mut string = part1.clone();
+        string.push("aΓ");
+        string.push(&part2);
+        string.push("aΓ");
+        string.push(&part3);
+        string.push("aΓ");
+        assert_eq!(string.split("aΓ").collect::<Vec<_>>(),
+                   [&part1[..], &part2[..], &part3[..], OsStr::new("")]);
+    }
+
+    #[test]
     fn osstr_starts_with_str() {
         assert!(OsStr::new("").starts_with_str(""));
         assert!(!OsStr::new("").starts_with_str("a"));
@@ -930,28 +943,6 @@ mod tests {
         assert_eq!(string.split_off_str('💩'), Some(("aé ", &non_utf8_osstring()[..])));
         string.push("x");
         assert_eq!(string.split_off_str('x'), None);
-    }
-
-    #[test]
-    fn osstr_split() {
-        assert_eq!(OsStr::new("").split('a').collect::<Vec<_>>(), [OsStr::new("")]);
-
-        let mut string = OsString::from("x");
-        string.push(non_utf8_osstring());
-        string.push("xx");
-        string.push(utf8_osstring());
-        string.push("x");
-        string.push(non_utf8_osstring());
-        string.push("x");
-        assert_eq!(string.split('x').collect::<Vec<_>>(),
-                   [OsStr::new(""), &non_utf8_osstring()[..], OsStr::new(""),
-                    &utf8_osstring()[..], &non_utf8_osstring()[..], OsStr::new("")]);
-    }
-
-    #[test]
-    #[should_panic(message = "not ASCII")]
-    fn osstr_split_nonascii() {
-        let _ = OsStr::new("").split('é');
     }
 
     #[test]

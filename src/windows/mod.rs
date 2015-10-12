@@ -16,6 +16,7 @@ use utf8_sections::Utf8Sections;
 use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use wtf8::{self, Wtf8, Wtf8Buf};
+use core::str::pattern::Pattern;
 use std::string::String;
 use std::result::Result;
 use std::option::Option;
@@ -34,10 +35,6 @@ impl Debug for Buf {
 
 pub struct Slice {
     pub inner: Wtf8
-}
-
-pub struct Split<'a> {
-    inner: wtf8::Split<'a>
 }
 
 impl Debug for Slice {
@@ -135,6 +132,10 @@ impl Slice {
         self.inner.utf8_sections()
     }
 
+    pub fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a> + Clone {
+        Split { inner: self.inner.split(pat) }
+    }
+
     pub fn starts_with_str(&self, prefix: &str) -> bool {
         self.inner.starts_with_str(prefix)
     }
@@ -150,21 +151,20 @@ impl Slice {
     pub fn split_off_str(&self, boundary: char) -> Option<(&str, &Slice)> {
         self.inner.split_off_str(boundary).map(|(a, b)| (a, Self::from_wtf8(b)))
     }
-
-    pub fn split_ascii<'a>(&'a self, boundary: u8) -> Split<'a> {
-        Split {
-            inner: self.inner.split_ascii(boundary)
-        }
-    }
 }
 
-impl<'a> Iterator for Split<'a> {
+pub struct Split<'a, P> where P: Pattern<'a> {
+    inner: wtf8::Split<'a, P>,
+}
+
+impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
     type Item = &'a Slice;
 
     fn next(&mut self) -> Option<&'a Slice> {
         self.inner.next().map(Slice::from_wtf8)
     }
 }
+
 
 pub mod os_str {
     use super::{Buf, Slice, Split as ImplSplit};

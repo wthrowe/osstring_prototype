@@ -12,12 +12,14 @@
 /// a `Vec<u8>`/`[u8]`.
 
 use slice_searcher::SliceSearcher;
+use split_bytes;
 use utf8_sections::Utf8Sections;
 
 use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use std::vec::Vec;
 use std::str;
+use core::str::pattern::Pattern;
 use std::string::String;
 use std::mem;
 
@@ -28,12 +30,6 @@ pub struct Buf {
 
 pub struct Slice {
     pub inner: [u8]
-}
-
-pub struct Split<'a> {
-    slice: &'a Slice,
-    boundary: u8,
-    position: usize,
 }
 
 impl Debug for Slice {
@@ -135,6 +131,10 @@ impl Slice {
         Utf8Sections::new(&self.inner)
     }
 
+    pub fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a> + Clone {
+        Split { inner: split_bytes::Split::new(&self.inner, pat) }
+    }
+
     pub fn starts_with_str(&self, prefix: &str) -> bool {
         self.inner.starts_with(prefix.as_bytes())
     }
@@ -166,40 +166,20 @@ impl Slice {
             .map(|b| (&utf8_prefix[0..b],
                       Self::from_u8_slice(&self.inner[b + boundary.len_utf8()..])))
     }
-
-    pub fn split_ascii<'a>(&'a self, boundary: u8) -> Split<'a> {
-        Split {
-            slice: self,
-            boundary: boundary,
-            position: 0,
-        }
-    }
 }
 
+pub struct Split<'a, P> where P: Pattern<'a> {
+    inner: split_bytes::Split<'a, P>,
+}
 
-impl<'a> Iterator for Split<'a> {
+impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
     type Item = &'a Slice;
 
     fn next(&mut self) -> Option<&'a Slice> {
-        // Using slice::split would make more sense here, but the
-        // iterator returned by that is unnamable, so it can't be
-        // stored directly in a struct.
-        let start = self.position;
-        if start > self.slice.inner.len() { return None; }
-
-        let length = self.slice.inner[start..].iter().position(|&b| b == self.boundary);
-        match length {
-            Some(length) => {
-                self.position += length + 1;
-                Some(Slice::from_u8_slice(&self.slice.inner[start..start + length]))
-            },
-            None => {
-                self.position = self.slice.inner.len() + 1;
-                Some(Slice::from_u8_slice(&self.slice.inner[start..]))
-            }
-        }
+        self.inner.next().map(Slice::from_u8_slice)
     }
 }
+
 
 pub mod os_str {
     use super::{Buf, Slice, Split as ImplSplit};
