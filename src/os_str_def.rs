@@ -521,6 +521,10 @@ pub struct Split<'a, P> where P: Pattern<'a> {
     inner: ImplSplit<'a, P>
 }
 
+impl<'a, P> Clone for Split<'a, P> where P: Pattern<'a> + Clone, P::Searcher: Clone {
+    fn clone(&self) -> Self { Split { inner: self.inner.clone() } }
+}
+
 impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
     type Item = &'a OsStr;
 

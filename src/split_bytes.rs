@@ -10,6 +10,16 @@ pub struct Split<'a, P> where P: Pattern<'a> {
     slice_start: usize,
 }
 
+impl<'a, P> Clone for Split<'a, P> where P: Pattern<'a> + Clone, P::Searcher: Clone {
+    fn clone(&self) -> Self {
+        Split {
+            slice: self.slice.clone(),
+            matches: self.matches.clone(),
+            slice_start: self.slice_start.clone(),
+        }
+    }
+}
+
 impl<'a, P> Split<'a, P> where P: Pattern<'a> + Clone {
     pub fn new(slice: &'a [u8], pat: P) -> Self {
         Split {
@@ -42,6 +52,16 @@ struct SplitInner<'a, P> where P: Pattern<'a> {
     section_start: usize,
 }
 
+impl<'a, P> Clone for SplitInner<'a, P> where P: Pattern<'a>, P::Searcher: Clone {
+    fn clone(&self) -> Self {
+        SplitInner {
+            matches: self.matches.clone(),
+            section_start: self.section_start.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
 struct SplitInnerFactory<P>(P);
 
 impl<'a, P> FnOnce<((usize, &'a str),)> for SplitInnerFactory<P> where P: Pattern<'a> + Clone {

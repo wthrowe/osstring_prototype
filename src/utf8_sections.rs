@@ -1,5 +1,6 @@
 use core::str;
 
+#[derive(Clone)]
 pub struct Utf8Sections<'a> {
     slice: &'a [u8],
     start: usize,

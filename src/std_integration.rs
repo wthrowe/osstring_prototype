@@ -115,6 +115,10 @@ pub struct Split<'a, P> where P: Pattern<'a> {
     inner: os_str::Split<'a, P>
 }
 
+impl<'a, P> Clone for Split<'a, P> where P: Pattern<'a> + Clone, P::Searcher: Clone {
+    fn clone(&self) -> Self { Split { inner: self.inner.clone() } }
+}
+
 impl<'a, P> From<os_str::Split<'a, P>> for Split<'a, P> where P: Pattern<'a> + Clone {
     fn from(x: os_str::Split<'a, P>) -> Split<'a, P> {
         Split { inner: x }
