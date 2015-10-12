@@ -11,6 +11,8 @@
 /// The underlying OsString/OsStr implementation on Windows is a
 /// wrapper around the "WTF-8" encoding; see the `wtf8` module for more.
 
+use utf8_sections::Utf8Sections;
+
 use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use wtf8::{self, Wtf8, Wtf8Buf};
@@ -127,6 +129,10 @@ impl Slice {
 
     pub fn contains_os(&self, needle: &Slice) -> bool {
         self.inner.contains_wtf8(&needle.inner)
+    }
+
+    pub fn utf8_sections<'a>(&'a self) -> Utf8Sections<'a> {
+        self.inner.utf8_sections()
     }
 
     pub fn starts_with_str(&self, prefix: &str) -> bool {

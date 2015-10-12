@@ -12,6 +12,7 @@
 /// a `Vec<u8>`/`[u8]`.
 
 use slice_searcher::SliceSearcher;
+use utf8_sections::Utf8Sections;
 
 use std::borrow::Cow;
 use std::fmt::{self, Debug};
@@ -130,6 +131,10 @@ impl Slice {
         SliceSearcher::new(&self.inner, &needle.inner).next().is_some()
     }
 
+    pub fn utf8_sections<'a>(&'a self) -> Utf8Sections<'a> {
+        Utf8Sections::new(&self.inner)
+    }
+
     pub fn starts_with_str(&self, prefix: &str) -> bool {
         self.inner.starts_with(prefix.as_bytes())
     }
@@ -170,6 +175,7 @@ impl Slice {
         }
     }
 }
+
 
 impl<'a> Iterator for Split<'a> {
     type Item = &'a Slice;

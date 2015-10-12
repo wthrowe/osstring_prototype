@@ -35,6 +35,8 @@
 // //! for conversion to/from various other string types. Eventually these types
 // //! will offer a full-fledged string API.
 
+use core::str::pattern::{Pattern, ReverseSearcher};
+
 use std::borrow::{Borrow, Cow, ToOwned};
 use std::ffi::CString;
 use std::fmt::{self, Debug};
@@ -345,6 +347,20 @@ impl OsStr {
     /// Returns true if `needle` is a substring of `self`.
     pub fn contains_os<S: AsRef<OsStr>>(&self, needle: S) -> bool {
         self.inner.contains_os(&needle.as_ref().inner)
+    }
+
+    pub fn contains<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a> + Clone {
+        self.inner.utf8_sections().any(|s| s.contains(pat.clone()))
+    }
+
+    pub fn starts_with<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a> {
+        self.inner.utf8_sections().nth(0).unwrap().starts_with(pat)
+    }
+
+    pub fn ends_with<'a, P>(&'a self, pat: P) -> bool
+            where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
+        // FIXME: Can we avoid scanning the whole string?
+        self.inner.utf8_sections().last().unwrap().ends_with(pat)
     }
 
     /// Returns true if the string starts with a valid UTF-8 sequence
@@ -804,6 +820,56 @@ mod tests {
         assert!(full.contains_os(&start));
         assert!(full.contains_os(&end));
         assert!(full.contains_os(&full));
+    }
+
+    #[test]
+    fn osstr_contains() {
+        assert!(OsStr::new("").contains(""));
+        assert!(!OsStr::new("").contains('a'));
+
+        let mut string = OsString::from("aé 💩");
+        string.push(non_utf8_osstring());
+        string.push("Zyzzl");
+        assert!(string.contains('💩'));
+        assert!(string.contains("yzz"));
+        assert!(!string.contains("💩Z"));
+        assert!(!string.contains(&non_utf8_osstring().into_string_lossy()[..]));
+    }
+
+    #[test]
+    fn osstr_starts_with() {
+        assert!(OsStr::new("").starts_with(""));
+        assert!(!OsStr::new("").starts_with('a'));
+
+        let mut string = OsString::from("aé 💩");
+        string.push(non_utf8_osstring());
+        string.push("Zyzzl");
+        assert!(string.starts_with("aé 💩"));
+        assert!(string.starts_with('a'));
+        assert!(!string.starts_with('Z'));
+
+        let mut string = non_utf8_osstring();
+        string.push("X");
+        assert!(string.starts_with(""));
+        assert!(!string.starts_with('X'));
+    }
+
+    #[test]
+    fn osstr_ends_with() {
+        assert!(OsStr::new("").ends_with(""));
+        assert!(!OsStr::new("").ends_with('a'));
+
+        let mut string = OsString::from("aé 💩");
+        string.push(non_utf8_osstring());
+        string.push("Zyzzl");
+        assert!(string.ends_with("Zyzzl"));
+        assert!(string.ends_with('l'));
+        assert!(!string.ends_with('z'));
+
+        let mut string = OsString::from("X");
+        string.push(non_utf8_osstring());
+        assert!(string.ends_with(""));
+        assert!(!string.ends_with('X'));
     }
 
     #[test]

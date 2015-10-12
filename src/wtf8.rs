@@ -25,6 +25,8 @@
 // unix (it's mostly used on windows), so don't worry about dead code here.
 #![allow(dead_code)]
 
+use utf8_sections::Utf8Sections;
+
 use core::char::{encode_utf8_raw, encode_utf16_raw};
 use core::str::next_code_point;
 
@@ -701,6 +703,10 @@ impl Wtf8 {
             }
         }
         return false;
+    }
+
+    pub fn utf8_sections<'a>(&'a self) -> Utf8Sections<'a> {
+        Utf8Sections::new(&self.bytes)
     }
 
     /// Returns true if the slice starts with the given `&str`.

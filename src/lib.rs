@@ -7,6 +7,7 @@
 #![feature(decode_utf16)]
 #![feature(iter_arith)]
 #![feature(no_std)]
+#![feature(pattern)]
 #![feature(slice_bytes)]
 #![feature(slice_patterns)]
 #![feature(str_internals)]
@@ -27,6 +28,7 @@ pub mod std_integration;
 mod str;
 pub mod os_str;
 pub mod unix;
+mod utf8_sections;
 pub mod windows;
 mod wtf8;
 
