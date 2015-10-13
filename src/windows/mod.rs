@@ -16,7 +16,7 @@ use utf8_sections::Utf8Sections;
 use std::borrow::Cow;
 use std::fmt::{self, Debug};
 use wtf8::{self, Wtf8, Wtf8Buf};
-use core::str::pattern::{DoubleEndedSearcher, Pattern};
+use core::str::pattern::{DoubleEndedSearcher, Pattern, ReverseSearcher, Searcher};
 use std::string::String;
 use std::result::Result;
 use std::option::Option;
@@ -132,8 +132,13 @@ impl Slice {
         self.inner.utf8_sections()
     }
 
-    pub fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a> + Clone {
+    pub fn split<'a, P>(&'a self, pat: P) -> Split<'a, P>
+    where P: Pattern<'a> {
         Split { inner: self.inner.split(pat) }
+    }
+
+    pub fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a> {
+        RSplit { inner: self.inner.rsplit(pat) }
     }
 
     pub fn starts_with_str(&self, prefix: &str) -> bool {
@@ -153,32 +158,41 @@ impl Slice {
     }
 }
 
-pub struct Split<'a, P> where P: Pattern<'a> {
-    inner: wtf8::Split<'a, P>,
-}
+macro_rules! make_split {
+    ($name:ident requires $bound:ident) => {
+        pub struct $name<'a, P> where P: Pattern<'a> {
+            inner: wtf8::$name<'a, P>,
+        }
 
-impl<'a, P> Clone for Split<'a, P> where P: Pattern<'a> + Clone, P::Searcher: Clone {
-    fn clone(&self) -> Self { Split { inner: self.inner.clone() } }
-}
+        impl<'a, P> Clone for $name<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: Clone {
+            fn clone(&self) -> Self { $name { inner: self.inner.clone() } }
+        }
 
-impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
-    type Item = &'a Slice;
+        impl<'a, P> Iterator for $name<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: $bound<'a> {
+            type Item = &'a Slice;
 
-    fn next(&mut self) -> Option<&'a Slice> {
-        self.inner.next().map(Slice::from_wtf8)
-    }
-}
+            fn next(&mut self) -> Option<&'a Slice> {
+                self.inner.next().map(Slice::from_wtf8)
+            }
+        }
 
-impl<'a, P> DoubleEndedIterator for Split<'a, P>
+        impl<'a, P> DoubleEndedIterator for $name<'a, P>
         where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
-    fn next_back(&mut self) -> Option<&'a Slice> {
-        self.inner.next_back().map(Slice::from_wtf8)
+            fn next_back(&mut self) -> Option<&'a Slice> {
+                self.inner.next_back().map(Slice::from_wtf8)
+            }
+        }
     }
 }
+
+make_split!{Split requires Searcher}
+make_split!{RSplit requires ReverseSearcher}
 
 
 pub mod os_str {
-    use super::{Buf, Slice, Split as ImplSplit};
+    use super::{Buf, Slice, Split as ImplSplit, RSplit as ImplRSplit};
 
     macro_rules! is_windows { () => { true } }
     macro_rules! if_unix_windows { (unix $u:block windows $w:block) => { $w } }

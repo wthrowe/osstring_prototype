@@ -61,7 +61,8 @@ pub trait OsStrPrototyping {
     fn starts_with<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a>;
     fn ends_with<'a, P>(&'a self, pat: P) -> bool
         where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a>;
-    fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a> + Clone;
+    fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a>;
+    fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a>;
     fn starts_with_str(&self, prefix: &str) -> bool;
     fn remove_prefix_str(&self, prefix: &str) -> Option<&Self>;
     fn slice_shift_char(&self) -> Option<(char, &Self)>;
@@ -94,8 +95,11 @@ impl OsStrPrototyping for ffi::OsStr {
         where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
         <&os_str::OsStr>::from(self).ends_with(pat)
     }
-    fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a> + Clone {
+    fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a> {
         <&os_str::OsStr>::from(self).split(pat).into()
+    }
+    fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a> {
+        <&os_str::OsStr>::from(self).rsplit(pat).into()
     }
     fn starts_with_str(&self, prefix: &str) -> bool {
         <&os_str::OsStr>::from(self).starts_with_str(prefix)
@@ -119,7 +123,7 @@ impl<'a, P> Clone for Split<'a, P> where P: Pattern<'a> + Clone, P::Searcher: Cl
     fn clone(&self) -> Self { Split { inner: self.inner.clone() } }
 }
 
-impl<'a, P> From<os_str::Split<'a, P>> for Split<'a, P> where P: Pattern<'a> + Clone {
+impl<'a, P> From<os_str::Split<'a, P>> for Split<'a, P> where P: Pattern<'a> {
     fn from(x: os_str::Split<'a, P>) -> Split<'a, P> {
         Split { inner: x }
     }
@@ -134,11 +138,44 @@ impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
 }
 
 impl<'a, P> DoubleEndedIterator for Split<'a, P>
-        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
     fn next_back(&mut self) -> Option<&'a ffi::OsStr> {
         self.inner.next_back().map(|x| x.into())
     }
 }
+
+
+pub struct RSplit<'a, P> where P: Pattern<'a> {
+    inner: os_str::RSplit<'a, P>
+}
+
+impl<'a, P> Clone for RSplit<'a, P>
+where P: Pattern<'a> + Clone, P::Searcher: Clone {
+    fn clone(&self) -> Self { RSplit { inner: self.inner.clone() } }
+}
+
+impl<'a, P> From<os_str::RSplit<'a, P>> for RSplit<'a, P> where P: Pattern<'a> {
+    fn from(x: os_str::RSplit<'a, P>) -> RSplit<'a, P> {
+        RSplit { inner: x }
+    }
+}
+
+impl<'a, P> Iterator for RSplit<'a, P>
+where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
+    type Item = &'a ffi::OsStr;
+
+    fn next(&mut self) -> Option<&'a ffi::OsStr> {
+        self.inner.next().map(|x| x.into())
+    }
+}
+
+impl<'a, P> DoubleEndedIterator for RSplit<'a, P>
+where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+    fn next_back(&mut self) -> Option<&'a ffi::OsStr> {
+        self.inner.next_back().map(|x| x.into())
+    }
+}
+
 
 impl<S: Borrow<ffi::OsStr>> LocalSliceConcatExt<ffi::OsStr> for [S] {
     type Output = ffi::OsString;
@@ -183,6 +220,7 @@ mod tests {
         assert!(string.starts_with("he"));
         assert!(string.ends_with("lo"));
         assert_eq!(string.split('l').collect::<Vec<_>>(), ["he", "", "o"]);
+        assert_eq!(string.rsplit('l').collect::<Vec<_>>(), ["o", "", "he"]);
         assert!(string.starts_with_str("he"));
         assert_eq!(string.remove_prefix_str("he"), Some(OsStr::new("llo")));
         assert_eq!(string.slice_shift_char(), Some(('h', OsStr::new("ello"))));

@@ -1,35 +1,17 @@
-use core::iter::{FlatMap, Rev};
-use core::str::pattern::{DoubleEndedSearcher, Pattern, ReverseSearcher};
-use std::str;
+use core::str::pattern::{DoubleEndedSearcher, Pattern, ReverseSearcher, Searcher};
 
 use utf8_sections::Utf8Sections;
 
-pub struct Split<'a, P> where P: Pattern<'a> {
-    slice: &'a [u8],
-    matches: FlatMap<Utf8Sections<'a>, SplitInner<'a, P>, SplitInnerFactory<P>>,
-    slice_start: usize,
-    back_start: usize,
+pub struct Split<'a, P>(SplitImpl<'a, P>) where P: Pattern<'a>;
+
+impl<'a, P> Clone for Split<'a, P>
+where P: Pattern<'a> + Clone, P::Searcher: Clone {
+    fn clone(&self) -> Self { Split(self.0.clone()) }
 }
 
-impl<'a, P> Clone for Split<'a, P> where P: Pattern<'a> + Clone, P::Searcher: Clone {
-    fn clone(&self) -> Self {
-        Split {
-            slice: self.slice.clone(),
-            matches: self.matches.clone(),
-            slice_start: self.slice_start.clone(),
-            back_start: self.back_start.clone(),
-        }
-    }
-}
-
-impl<'a, P> Split<'a, P> where P: Pattern<'a> + Clone {
+impl<'a, P> Split<'a, P> where P: Pattern<'a> {
     pub fn new(slice: &'a [u8], pat: P) -> Self {
-        Split {
-            slice: slice,
-            matches: Utf8Sections::new(slice).flat_map(SplitInnerFactory(pat)),
-            slice_start: 0,
-            back_start: slice.len(),
-        }
+        Split(SplitImpl::new(slice, pat))
     }
 }
 
@@ -37,218 +19,185 @@ impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<&'a [u8]> {
-        if self.slice_start > self.back_start { return None; }
-        if let Some((start, end)) = self.matches.next() {
-            let result = &self.slice[self.slice_start..start];
-            self.slice_start = end;
-            return Some(result);
-        } else {
-            let result = &self.slice[self.slice_start..self.back_start];
-            self.slice_start = self.back_start + 1;
-            return Some(result);
-        }
+        self.0.next()
     }
 }
 
 impl<'a, P> DoubleEndedIterator for Split<'a, P>
-        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
     fn next_back(&mut self) -> Option<&'a [u8]> {
-        if self.slice_start > self.back_start { return None; }
-        if let Some((start, end)) = self.matches.next_back() {
-            let result = &self.slice[end..self.back_start];
-            self.back_start = start;
-            return Some(result);
-        } else {
-            let result = &self.slice[self.slice_start..self.back_start];
-            self.slice_start = self.back_start + 1;
-            return Some(result);
-        }
+        self.0.next_back()
     }
 }
 
-#[derive(Clone)]
-struct SplitInnerFactory<P>(P);
-
-impl<'a, P> FnOnce<((usize, &'a str),)> for SplitInnerFactory<P> where P: Pattern<'a> + Clone {
-    type Output = SplitInner<'a, P>;
-
-    extern "rust-call"
-    fn call_once(mut self, args: ((usize, &'a str),)) -> SplitInner<'a, P> {
-        self.call_mut(args)
-    }
-}
-
-impl<'a, P> FnMut<((usize, &'a str),)> for SplitInnerFactory<P> where P: Pattern<'a> + Clone {
-    extern "rust-call"
-    fn call_mut(&mut self, ((start, section),): ((usize, &'a str),)) -> SplitInner<'a, P> {
-        SplitInner {
-            matches: section.match_indices(self.0.clone()),
-            section_start: start,
-        }
-    }
-}
-
-struct SplitInner<'a, P> where P: Pattern<'a> {
-    matches: str::MatchIndices<'a, P>,
-    section_start: usize,
-}
-
-impl<'a, P> Clone for SplitInner<'a, P> where P: Pattern<'a>, P::Searcher: Clone {
-    fn clone(&self) -> Self {
-        SplitInner {
-            matches: self.matches.clone(),
-            section_start: self.section_start.clone(),
-        }
-    }
-}
-
-impl<'a, P> SplitInner<'a, P> where P: Pattern<'a> {
-    fn apply(&self, (offset, divider): (usize, &'a str)) -> (usize, usize) {
-        let begin = self.section_start + offset;
-        let end = begin + divider.len();
-        (begin, end)
-    }
-}
-
-impl<'a, P> Iterator for SplitInner<'a, P> where P: Pattern<'a> {
-    type Item = (usize, usize);
-
-    fn next(&mut self) -> Option<(usize, usize)> {
-        self.matches.next().map(|x| self.apply(x))
-    }
-}
-
-impl<'a, P> DoubleEndedIterator for SplitInner<'a, P>
-        where P: Pattern<'a>, P::Searcher: DoubleEndedSearcher<'a> {
-    fn next_back(&mut self) -> Option<(usize, usize)> {
-        self.matches.next_back().map(|x| self.apply(x))
-    }
-}
-
-
-
-pub struct RSplit<'a, P> where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
-    slice: &'a [u8],
-    matches: FlatMap<Rev<Utf8Sections<'a>>, RSplitInner<'a, P>, RSplitInnerFactory<P>>,
-    slice_start: usize,
-    back_start: usize,
-}
+pub struct RSplit<'a, P>(SplitImpl<'a, P>) where P: Pattern<'a>;
 
 impl<'a, P> Clone for RSplit<'a, P>
-        where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> + Clone {
-    fn clone(&self) -> Self {
-        RSplit {
-            slice: self.slice.clone(),
-            matches: self.matches.clone(),
-            slice_start: self.slice_start.clone(),
-            back_start: self.back_start.clone(),
-        }
-    }
+where P: Pattern<'a> + Clone, P::Searcher: Clone {
+    fn clone(&self) -> Self { RSplit(self.0.clone()) }
 }
 
-impl<'a, P> RSplit<'a, P> where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
+impl<'a, P> RSplit<'a, P> where P: Pattern<'a> {
     pub fn new(slice: &'a [u8], pat: P) -> Self {
-        RSplit {
-            slice: slice,
-            matches: Utf8Sections::new(slice).rev().flat_map(RSplitInnerFactory(pat)),
-            slice_start: 0,
-            back_start: slice.len(),
-        }
+        RSplit(SplitImpl::new(slice, pat))
     }
 }
 
 impl<'a, P> Iterator for RSplit<'a, P>
-        where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
+where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<&'a [u8]> {
-        if self.slice_start > self.back_start { return None; }
-        if let Some((start, end)) = self.matches.next() {
-            let result = &self.slice[self.slice_start..start];
-            self.slice_start = end;
-            return Some(result);
-        } else {
-            let result = &self.slice[self.slice_start..self.back_start];
-            self.slice_start = self.back_start + 1;
-            return Some(result);
-        }
+        self.0.next_back()
     }
 }
 
 impl<'a, P> DoubleEndedIterator for RSplit<'a, P>
-        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
     fn next_back(&mut self) -> Option<&'a [u8]> {
-        if self.slice_start > self.back_start { return None; }
-        if let Some((start, end)) = self.matches.next_back() {
-            let result = &self.slice[end..self.back_start];
-            self.back_start = start;
-            return Some(result);
-        } else {
-            let result = &self.slice[self.slice_start..self.back_start];
-            self.slice_start = self.back_start + 1;
-            return Some(result);
-        }
+        self.0.next()
     }
 }
 
-#[derive(Clone)]
-struct RSplitInnerFactory<P>(P);
 
-impl<'a, P> FnOnce<((usize, &'a str),)> for RSplitInnerFactory<P>
-        where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
-    type Output = RSplitInner<'a, P>;
-
-    extern "rust-call"
-    fn call_once(mut self, args: ((usize, &'a str),)) -> RSplitInner<'a, P> {
-        self.call_mut(args)
-    }
+struct SplitImpl<'a, P> where P: Pattern<'a> {
+    slice: &'a [u8],
+    pat: P,
+    sections: Utf8Sections<'a>,
+    front_searcher: Option<P::Searcher>,
+    back_searcher: Option<P::Searcher>,
+    front_section_start: usize,
+    back_section_start: usize,
+    remainder: (usize, usize),
 }
 
-impl<'a, P> FnMut<((usize, &'a str),)> for RSplitInnerFactory<P>
-        where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
-    extern "rust-call"
-    fn call_mut(&mut self, ((start, section),): ((usize, &'a str),)) -> RSplitInner<'a, P> {
-        RSplitInner {
-            matches: section.rmatch_indices(self.0.clone()),
-            section_start: start,
-        }
-    }
-}
-
-struct RSplitInner<'a, P> where P: Pattern<'a> {
-    matches: str::RMatchIndices<'a, P>,
-    section_start: usize,
-}
-
-impl<'a, P> Clone for RSplitInner<'a, P> where P: Pattern<'a>, P::Searcher: Clone {
+impl<'a, P> Clone for SplitImpl<'a, P>
+where P: Pattern<'a> + Clone, P::Searcher: Clone {
     fn clone(&self) -> Self {
-        RSplitInner {
-            matches: self.matches.clone(),
-            section_start: self.section_start.clone(),
+        SplitImpl {
+            slice: self.slice.clone(),
+            pat: self.pat.clone(),
+            sections: self.sections.clone(),
+            front_searcher: self.front_searcher.clone(),
+            back_searcher: self.back_searcher.clone(),
+            front_section_start: self.front_section_start.clone(),
+            back_section_start: self.back_section_start.clone(),
+            remainder: self.remainder.clone(),
         }
     }
 }
 
-impl<'a, P> RSplitInner<'a, P> where P: Pattern<'a> {
-    fn apply(&self, (offset, divider): (usize, &'a str)) -> (usize, usize) {
-        let begin = self.section_start + offset;
-        let end = begin + divider.len();
-        (begin, end)
+impl<'a, P> SplitImpl<'a, P> where P: Pattern<'a> {
+    pub fn new(slice: &'a [u8], pat: P) -> Self {
+        SplitImpl {
+            slice: slice,
+            pat: pat,
+            sections: Utf8Sections::new(slice),
+            front_searcher: None,
+            back_searcher: None,
+            front_section_start: 0,
+            back_section_start: slice.len(),
+            remainder: (0, slice.len()),
+        }
     }
-}
 
-impl<'a, P> Iterator for RSplitInner<'a, P>
-        where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
-    type Item = (usize, usize);
+    fn next(&mut self) -> Option<&'a [u8]> where P: Clone {
+        if self.remainder.1 < self.remainder.0 { return None; }
+        loop {
+            if self.front_section_start == self.back_section_start {
+                // Last section.  Both directions use the same iterator.
+                let next_match = {
+                    let searcher = self.front_searcher.as_mut().or(self.back_searcher.as_mut());
+                    searcher.and_then(|m| m.next_match())
+                };
+                if let Some((start, end)) = next_match {
+                    // We have a match
+                    return self.make_front_match(start, end);
+                } else {
+                    // We've exhausted all the matches, but we still
+                    // have the section between the last matches from
+                    // either side to return.
+                    let result = &self.slice[self.remainder.0..self.remainder.1];
+                    self.remainder.0 = self.remainder.1 + 1;
+                    return Some(result);
+                }
+            }
+            if self.front_searcher.is_none() {
+                if let Some((start, section)) = self.sections.next() {
+                    // New segment
+                    self.front_searcher = Some(self.pat.clone().into_searcher(section));
+                    self.front_section_start = start;
+                } else {
+                    // Starting the last segment.  Go back to the top.
+                    self.front_section_start = self.back_section_start;
+                    continue;
+                }
+            }
 
-    fn next(&mut self) -> Option<(usize, usize)> {
-        self.matches.next().map(|x| self.apply(x))
+            if let Some((start, end)) = self.front_searcher.as_mut().unwrap().next_match() {
+                // We have a match
+                return self.make_front_match(start, end);
+            }
+
+            // Finished this segment
+            self.front_searcher = None;
+        }
     }
-}
 
-impl<'a, P> DoubleEndedIterator for RSplitInner<'a, P>
-        where P: Pattern<'a>, P::Searcher: DoubleEndedSearcher<'a> {
-    fn next_back(&mut self) -> Option<(usize, usize)> {
-        self.matches.next_back().map(|x| self.apply(x))
+    fn make_front_match(&mut self, start: usize, end: usize) -> Option<&'a [u8]> {
+        let result = &self.slice[self.remainder.0..self.front_section_start + start];
+        self.remainder.0 = self.front_section_start + end;
+        return Some(result);
+    }
+
+    fn next_back(&mut self) -> Option<&'a [u8]>
+    where P: Clone, P::Searcher: ReverseSearcher<'a> {
+        if self.remainder.1 < self.remainder.0 { return None; }
+        loop {
+            if self.front_section_start == self.back_section_start {
+                // Last section.  Both directions use the same iterator.
+                let next_match = {
+                    let searcher = self.front_searcher.as_mut().or(self.back_searcher.as_mut());
+                    searcher.and_then(|m| m.next_match_back())
+                };
+                if let Some((start, end)) = next_match {
+                    // We have a match
+                    return self.make_back_match(start, end);
+                } else {
+                    // We've exhausted all the matches, but we still
+                    // have the section between the last matches from
+                    // either side to return.
+                    let result = &self.slice[self.remainder.0..self.remainder.1];
+                    self.remainder.0 = self.remainder.1 + 1;
+                    return Some(result);
+                }
+            }
+            if self.back_searcher.is_none() {
+                if let Some((start, section)) = self.sections.next_back() {
+                    // New segment
+                    self.back_searcher = Some(self.pat.clone().into_searcher(section));
+                    self.back_section_start = start;
+                } else {
+                    // Starting the last segment.  Go back to the top.
+                    self.back_section_start = self.front_section_start;
+                    continue;
+                }
+            }
+
+            let next_match = self.back_searcher.as_mut().unwrap().next_match_back();
+            if let Some((start, end)) = next_match {
+                // We have a match
+                return self.make_back_match(start, end);
+            }
+
+            // Finished this segment
+            self.back_searcher = None;
+        }
+    }
+
+    fn make_back_match(&mut self, start: usize, end: usize) -> Option<&'a [u8]> {
+        let result = &self.slice[self.back_section_start + end..self.remainder.1];
+        self.remainder.1 = self.back_section_start + start;
+        return Some(result);
     }
 }
