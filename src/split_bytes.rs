@@ -2,91 +2,69 @@ use core::str::pattern::{DoubleEndedSearcher, Pattern, ReverseSearcher, Searcher
 
 use utf8_sections::Utf8Sections;
 
-pub struct Matches<'a, P>(MatchImpl<'a, P>) where P: Pattern<'a>;
+macro_rules! make_iterator {
+    ($forward:ident and $reverse:ident wrap $inner:ident yielding $map:expr => $ret:ty) => {
+        pub struct $forward<'a, P>($inner<'a, P>) where P: Pattern<'a>;
 
-impl<'a, P> Clone for Matches<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: Clone {
-    fn clone(&self) -> Self { Matches(self.0.clone()) }
-}
+        impl<'a, P> Clone for $forward<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: Clone {
+            fn clone(&self) -> Self { $forward(self.0.clone()) }
+        }
 
-impl<'a, P> Matches<'a, P> where P: Pattern<'a> {
-    pub fn new(slice: &'a [u8], pat: P) -> Self {
-        Matches(MatchImpl::new(slice, pat))
+        impl<'a, P> $forward<'a, P> where P: Pattern<'a> {
+            pub fn new(slice: &'a [u8], pat: P) -> Self {
+                $forward($inner::new(slice, pat))
+            }
+        }
+
+        impl<'a, P> Iterator for $forward<'a, P> where P: Pattern<'a> + Clone {
+            type Item = $ret;
+
+            fn next(&mut self) -> Option<$ret> {
+                self.0.next().map($map)
+            }
+        }
+
+        impl<'a, P> DoubleEndedIterator for $forward<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+            fn next_back(&mut self) -> Option<$ret> {
+                self.0.next_back().map($map)
+            }
+        }
+
+        pub struct $reverse<'a, P>($inner<'a, P>) where P: Pattern<'a>;
+
+        impl<'a, P> Clone for $reverse<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: Clone {
+            fn clone(&self) -> Self { $reverse(self.0.clone()) }
+        }
+
+        impl<'a, P> $reverse<'a, P> where P: Pattern<'a> {
+            pub fn new(slice: &'a [u8], pat: P) -> Self {
+                $reverse($inner::new(slice, pat))
+            }
+        }
+
+        impl<'a, P> Iterator for $reverse<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
+            type Item = $ret;
+
+            fn next(&mut self) -> Option<$ret> {
+                self.0.next_back().map($map)
+            }
+        }
+
+        impl<'a, P> DoubleEndedIterator for $reverse<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+            fn next_back(&mut self) -> Option<$ret> {
+                self.0.next().map($map)
+            }
+        }
     }
 }
 
-impl<'a, P> Iterator for Matches<'a, P> where P: Pattern<'a> + Clone {
-    type Item = &'a str;
-
-    fn next(&mut self) -> Option<&'a str> {
-        self.0.next().map(|x| x.1)
-    }
-}
-
-impl<'a, P> DoubleEndedIterator for Matches<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
-    fn next_back(&mut self) -> Option<&'a str> {
-        self.0.next_back().map(|x| x.1)
-    }
-}
-
-
-pub struct Split<'a, P>(SplitImpl<'a, P>) where P: Pattern<'a>;
-
-impl<'a, P> Clone for Split<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: Clone {
-    fn clone(&self) -> Self { Split(self.0.clone()) }
-}
-
-impl<'a, P> Split<'a, P> where P: Pattern<'a> {
-    pub fn new(slice: &'a [u8], pat: P) -> Self {
-        Split(SplitImpl::new(slice, pat))
-    }
-}
-
-impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
-    type Item = &'a [u8];
-
-    fn next(&mut self) -> Option<&'a [u8]> {
-        self.0.next()
-    }
-}
-
-impl<'a, P> DoubleEndedIterator for Split<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
-    fn next_back(&mut self) -> Option<&'a [u8]> {
-        self.0.next_back()
-    }
-}
-
-pub struct RSplit<'a, P>(SplitImpl<'a, P>) where P: Pattern<'a>;
-
-impl<'a, P> Clone for RSplit<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: Clone {
-    fn clone(&self) -> Self { RSplit(self.0.clone()) }
-}
-
-impl<'a, P> RSplit<'a, P> where P: Pattern<'a> {
-    pub fn new(slice: &'a [u8], pat: P) -> Self {
-        RSplit(SplitImpl::new(slice, pat))
-    }
-}
-
-impl<'a, P> Iterator for RSplit<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
-    type Item = &'a [u8];
-
-    fn next(&mut self) -> Option<&'a [u8]> {
-        self.0.next_back()
-    }
-}
-
-impl<'a, P> DoubleEndedIterator for RSplit<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
-    fn next_back(&mut self) -> Option<&'a [u8]> {
-        self.0.next()
-    }
-}
+make_iterator!{Matches and RMatches wrap MatchImpl yielding |x| x.1 => &'a str}
+make_iterator!{Split and RSplit wrap SplitImpl yielding |x| x => &'a [u8]}
 
 
 struct MatchImpl<'a, P> where P: Pattern<'a> {
