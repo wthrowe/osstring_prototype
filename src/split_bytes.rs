@@ -24,7 +24,7 @@ impl<'a, P> Iterator for Matches<'a, P> where P: Pattern<'a> + Clone {
 }
 
 impl<'a, P> DoubleEndedIterator for Matches<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
+where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
     fn next_back(&mut self) -> Option<&'a str> {
         self.0.next_back().map(|x| x.1)
     }
