@@ -376,7 +376,7 @@ impl OsStr {
 
     /// An iterator over substrings of `self` separated by characters
     /// matched by a pattern, in reverse order.  See `str::rsplit` for
-    /// deatils.
+    /// details.
     ///
     /// Note that patterns can only match UTF-8 sections of the `OsStr`.
     pub fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a> {
