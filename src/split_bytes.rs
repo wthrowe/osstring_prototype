@@ -102,27 +102,25 @@ impl<'a, P> Clone for SplitInner<'a, P> where P: Pattern<'a>, P::Searcher: Clone
     }
 }
 
+impl<'a, P> SplitInner<'a, P> where P: Pattern<'a> {
+    fn apply(&self, (offset, divider): (usize, &'a str)) -> (usize, usize) {
+        let begin = self.section_start + offset;
+        let end = begin + divider.len();
+        (begin, end)
+    }
+}
+
 impl<'a, P> Iterator for SplitInner<'a, P> where P: Pattern<'a> {
     type Item = (usize, usize);
 
     fn next(&mut self) -> Option<(usize, usize)> {
-        self.matches.next().map(
-            |(offset, divider)| {
-                let begin = self.section_start + offset;
-                let end = begin + divider.len();
-                (begin, end)
-            })
+        self.matches.next().map(|x| self.apply(x))
     }
 }
 
 impl<'a, P> DoubleEndedIterator for SplitInner<'a, P>
         where P: Pattern<'a>, P::Searcher: DoubleEndedSearcher<'a> {
     fn next_back(&mut self) -> Option<(usize, usize)> {
-        self.matches.next_back().map(
-            |(offset, divider)| {
-                let begin = self.section_start + offset;
-                let end = begin + divider.len();
-                (begin, end)
-            })
+        self.matches.next_back().map(|x| self.apply(x))
     }
 }
