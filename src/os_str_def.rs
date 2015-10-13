@@ -525,57 +525,63 @@ impl AsInner<Slice> for OsStr {
     }
 }
 
-/// Iterator over parts of an OS string.
-pub struct Split<'a, P> where P: Pattern<'a> {
-    inner: ImplSplit<'a, P>
-}
 
-impl<'a, P> Clone for Split<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: Clone {
-    fn clone(&self) -> Self { Split { inner: self.inner.clone() } }
-}
+macro_rules! make_iterator {
+    ($forward:ident and $reverse:ident wrap $inner:ident and $rinner:ident
+     yielding $map:expr => $ret:ty) => {
+        pub struct $forward<'a, P> where P: Pattern<'a> {
+            inner: $inner<'a, P>
+        }
 
-impl<'a, P> Iterator for Split<'a, P>
-where P: Pattern<'a> + Clone {
-    type Item = &'a OsStr;
+        impl<'a, P> Clone for $forward<'a, P>
+            where P: Pattern<'a> + Clone, P::Searcher: Clone {
+                fn clone(&self) -> Self { $forward { inner: self.inner.clone() } }
+            }
 
-    fn next(&mut self) -> Option<&'a OsStr> {
-        self.inner.next().map(|s| OsStr::from_inner(s))
+        impl<'a, P> Iterator for $forward<'a, P> where P: Pattern<'a> + Clone {
+            type Item = $ret;
+
+            fn next(&mut self) -> Option<$ret> {
+                self.inner.next().map($map)
+            }
+        }
+
+        impl<'a, P> DoubleEndedIterator for $forward<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+            fn next_back(&mut self) -> Option<$ret> {
+                self.inner.next_back().map($map)
+            }
+        }
+
+        pub struct $reverse<'a, P> where P: Pattern<'a> {
+            inner: $rinner<'a, P>
+        }
+
+        impl<'a, P> Clone for $reverse<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: Clone {
+            fn clone(&self) -> Self { $reverse { inner: self.inner.clone() } }
+        }
+
+        impl<'a, P> Iterator for $reverse<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
+            type Item = $ret;
+
+            fn next(&mut self) -> Option<$ret> {
+                self.inner.next().map($map)
+            }
+        }
+
+        impl<'a, P> DoubleEndedIterator for $reverse<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+            fn next_back(&mut self) -> Option<$ret> {
+                self.inner.next_back().map($map)
+            }
+        }
     }
 }
 
-impl<'a, P> DoubleEndedIterator for Split<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
-    fn next_back(&mut self) -> Option<&'a OsStr> {
-        self.inner.next_back().map(|s| OsStr::from_inner(s))
-    }
-}
-
-/// Reverse iterator over parts of an OS string.
-pub struct RSplit<'a, P> where P: Pattern<'a> {
-    inner: ImplRSplit<'a, P>
-}
-
-impl<'a, P> Clone for RSplit<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: Clone {
-    fn clone(&self) -> Self { RSplit { inner: self.inner.clone() } }
-}
-
-impl<'a, P> Iterator for RSplit<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
-    type Item = &'a OsStr;
-
-    fn next(&mut self) -> Option<&'a OsStr> {
-        self.inner.next().map(|s| OsStr::from_inner(s))
-    }
-}
-
-impl<'a, P> DoubleEndedIterator for RSplit<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
-    fn next_back(&mut self) -> Option<&'a OsStr> {
-        self.inner.next_back().map(|s| OsStr::from_inner(s))
-    }
-}
+make_iterator!{Split and RSplit wrap ImplSplit and ImplRSplit
+               yielding |s| OsStr::from_inner(s) => &'a OsStr}
 
 
 impl<S: Borrow<OsStr>> LocalSliceConcatExt<OsStr> for [S] {
