@@ -139,6 +139,14 @@ impl Slice {
         RSplit { inner: split_bytes::RSplit::new(&self.inner, pat) }
     }
 
+    pub fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P> where P: Pattern<'a> {
+        SplitN { inner: split_bytes::SplitN::new(&self.inner, count, pat) }
+    }
+
+    pub fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P> where P: Pattern<'a> {
+        RSplitN { inner: split_bytes::RSplitN::new(&self.inner, count, pat) }
+    }
+
     pub fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P> where P: Pattern<'a> {
         Matches { inner: split_bytes::Matches::new(&self.inner, pat) }
     }
@@ -199,6 +207,9 @@ macro_rules! make_iterator {
                 self.inner.next().map($map)
             }
         }
+    };
+    ($name:ident requires $bound:ident is double ended yielding $map:expr => $ret:ty) => {
+        make_iterator!{$name requires $bound yielding $map => $ret}
 
         impl<'a, P> DoubleEndedIterator for $name<'a, P>
         where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
@@ -209,10 +220,14 @@ macro_rules! make_iterator {
     }
 }
 
-make_iterator!{Split requires Searcher yielding Slice::from_u8_slice => &'a Slice}
-make_iterator!{RSplit requires ReverseSearcher yielding Slice::from_u8_slice => &'a Slice}
-make_iterator!{Matches requires Searcher yielding |x| x => &'a str}
-make_iterator!{RMatches requires ReverseSearcher yielding |x| x => &'a str}
+make_iterator!{Split requires Searcher is double ended
+               yielding Slice::from_u8_slice => &'a Slice}
+make_iterator!{RSplit requires ReverseSearcher is double ended
+               yielding Slice::from_u8_slice => &'a Slice}
+make_iterator!{SplitN requires Searcher yielding Slice::from_u8_slice => &'a Slice}
+make_iterator!{RSplitN requires ReverseSearcher yielding Slice::from_u8_slice => &'a Slice}
+make_iterator!{Matches requires Searcher is double ended yielding |x| x => &'a str}
+make_iterator!{RMatches requires ReverseSearcher is double ended yielding |x| x => &'a str}
 
 pub mod os_str {
     use super::{Buf, Slice};

@@ -63,6 +63,8 @@ pub trait OsStrPrototyping {
         where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a>;
     fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a>;
     fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a>;
+    fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P> where P: Pattern<'a>;
+    fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P> where P: Pattern<'a>;
     fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P> where P: Pattern<'a>;
     fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P> where P: Pattern<'a>;
     fn starts_with_str(&self, prefix: &str) -> bool;
@@ -102,6 +104,12 @@ impl OsStrPrototyping for ffi::OsStr {
     }
     fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a> {
         <&os_str::OsStr>::from(self).rsplit(pat).into()
+    }
+    fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P> where P: Pattern<'a> {
+        <&os_str::OsStr>::from(self).splitn(count, pat).into()
+    }
+    fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P> where P: Pattern<'a> {
+        <&os_str::OsStr>::from(self).rsplitn(count, pat).into()
     }
     fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P> where P: Pattern<'a> {
         <&os_str::OsStr>::from(self).matches(pat).into()
@@ -184,7 +192,7 @@ where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
     }
 }
 
-pub use os_str::{Matches, RMatches};
+pub use os_str::{SplitN, RSplitN, Matches, RMatches};
 
 
 impl<S: Borrow<ffi::OsStr>> LocalSliceConcatExt<ffi::OsStr> for [S] {
@@ -231,6 +239,8 @@ mod tests {
         assert!(string.ends_with("lo"));
         assert_eq!(string.split('l').collect::<Vec<_>>(), ["he", "", "o"]);
         assert_eq!(string.rsplit('l').collect::<Vec<_>>(), ["o", "", "he"]);
+        assert_eq!(string.splitn(2, 'l').collect::<Vec<_>>(), ["he", "lo"]);
+        assert_eq!(string.rsplitn(2, 'l').collect::<Vec<_>>(), ["o", "hel"]);
         assert_eq!(string.matches('l').collect::<Vec<_>>(), ["l"; 2]);
         assert_eq!(string.rmatches('l').collect::<Vec<_>>(), ["l"; 2]);
         assert!(string.starts_with_str("he"));

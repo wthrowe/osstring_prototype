@@ -722,6 +722,24 @@ impl Wtf8 {
         RSplit { inner: split_bytes::RSplit::new(&self.bytes, pat) }
     }
 
+    /// An iterator over substrings of `self` separated by characters
+    /// matched by a pattern, restricted to returning at most `count`
+    /// items.  See `str::splitn` for details.
+    ///
+    /// Note that patterns can only match UTF-8 sections.
+    pub fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P> where P: Pattern<'a> {
+        SplitN { inner: split_bytes::SplitN::new(&self.bytes, count, pat) }
+    }
+
+    /// An iterator over substrings of `self` separated by characters
+    /// matched by a pattern, in reverse order, restricted to returning
+    /// at most `count` items.  See `str::rsplitn` for details.
+    ///
+    /// Note that patterns can only match UTF-8 sections.
+    pub fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P> where P: Pattern<'a> {
+        RSplitN { inner: split_bytes::RSplitN::new(&self.bytes, count, pat) }
+    }
+
     /// An iterator over matches of a pattern in `self`.  See
     /// `str::matches` for details.
     ///
@@ -1077,6 +1095,9 @@ macro_rules! make_iterator {
                 self.inner.next().map($map)
             }
         }
+    };
+    ($name:ident requires $bound:ident is double ended yielding $map:expr => $ret:ty) => {
+        make_iterator!{$name requires $bound yielding $map => $ret}
 
         impl<'a, P> DoubleEndedIterator for $name<'a, P>
         where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
@@ -1087,12 +1108,16 @@ macro_rules! make_iterator {
     }
 }
 
-make_iterator!{Split requires Searcher
+make_iterator!{Split requires Searcher is double ended
                yielding |s| unsafe { Wtf8::from_bytes_unchecked(s) } => &'a Wtf8}
-make_iterator!{RSplit requires ReverseSearcher
+make_iterator!{RSplit requires ReverseSearcher is double ended
                yielding |s| unsafe { Wtf8::from_bytes_unchecked(s) } => &'a Wtf8}
-make_iterator!{Matches requires Searcher yielding |x| x => &'a str}
-make_iterator!{RMatches requires ReverseSearcher yielding |x| x => &'a str}
+make_iterator!{SplitN requires Searcher
+               yielding |s| unsafe { Wtf8::from_bytes_unchecked(s) } => &'a Wtf8}
+make_iterator!{RSplitN requires ReverseSearcher
+               yielding |s| unsafe { Wtf8::from_bytes_unchecked(s) } => &'a Wtf8}
+make_iterator!{Matches requires Searcher is double ended yielding |x| x => &'a str}
+make_iterator!{RMatches requires ReverseSearcher is double ended yielding |x| x => &'a str}
 
 
 #[cfg(test)]
@@ -1801,6 +1826,51 @@ mod tests {
 
         assert_eq!(Wtf8::from_str("aaa").rsplit("aa").collect::<Vec<_>>(),
                    [Wtf8::from_str(""), Wtf8::from_str("a")]);
+    }
+
+    #[test]
+    fn wtf8_splitn() {
+        assert_eq!(Wtf8::from_str("").splitn(2, 'a').collect::<Vec<_>>(),
+                   [Wtf8::from_str("")]);
+        assert_eq!(Wtf8::from_str("a").splitn(0, 'a').collect::<Vec<_>>(),
+                   [] as [&Wtf8; 0]);
+        assert_eq!(Wtf8::from_str("a").splitn(1, 'a').collect::<Vec<_>>(),
+                   [Wtf8::from_str("a")]);
+
+        let mut non_utf8 = Wtf8Buf::new();
+        non_utf8.push(CodePoint::from_u32(0xD800).unwrap());
+        let mut string = Wtf8Buf::from_str("aΓ");
+        string.push_wtf8(&non_utf8);
+        string.push_str("aΓaΓaé 💩aΓ");
+        string.push_wtf8(&non_utf8);
+        string.push_str("aΓ");
+        let mut end = non_utf8.clone();
+        end.push_str("aΓ");
+        assert_eq!(string.splitn(5, "aΓ").collect::<Vec<_>>(),
+                   [Wtf8::from_str(""), &non_utf8[..], Wtf8::from_str(""),
+                    Wtf8::from_str("aé 💩"), &end[..]]);
+    }
+
+    #[test]
+    fn wtf8_rsplitn() {
+        assert_eq!(Wtf8::from_str("").rsplitn(2, 'a').collect::<Vec<_>>(),
+                   [Wtf8::from_str("")]);
+        assert_eq!(Wtf8::from_str("a").rsplitn(0, 'a').collect::<Vec<_>>(),
+                   [] as [&Wtf8; 0]);
+        assert_eq!(Wtf8::from_str("a").rsplitn(1, 'a').collect::<Vec<_>>(),
+                   [Wtf8::from_str("a")]);
+
+        let mut non_utf8 = Wtf8Buf::new();
+        non_utf8.push(CodePoint::from_u32(0xD800).unwrap());
+        let mut string = Wtf8Buf::from_str("aΓ");
+        string.push_wtf8(&non_utf8);
+        let beginning = string.clone();
+        string.push_str("aΓaΓaé 💩aΓ");
+        string.push_wtf8(&non_utf8);
+        string.push_str("aΓ");
+        assert_eq!(string.rsplitn(5, "aΓ").collect::<Vec<_>>(),
+                   [Wtf8::from_str(""), &non_utf8[..], Wtf8::from_str("aé 💩"),
+                    Wtf8::from_str(""), &beginning[..]]);
     }
 
     #[test]

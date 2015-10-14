@@ -383,6 +383,24 @@ impl OsStr {
         RSplit { inner: self.inner.rsplit(pat) }
     }
 
+    /// An iterator over substrings of `self` separated by characters
+    /// matched by a pattern, restricted to returning at most `count`
+    /// items.  See `str::splitn` for details.
+    ///
+    /// Note that patterns can only match UTF-8 sections of the `OsStr`.
+    pub fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P> where P: Pattern<'a> {
+        SplitN { inner: self.inner.splitn(count, pat) }
+    }
+
+    /// An iterator over substrings of `self` separated by characters
+    /// matched by a pattern, in reverse order, restricted to returning
+    /// at most `count` items.  See `str::rsplitn` for details.
+    ///
+    /// Note that patterns can only match UTF-8 sections of the `OsStr`.
+    pub fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P> where P: Pattern<'a> {
+        RSplitN { inner: self.inner.rsplitn(count, pat) }
+    }
+
     /// An iterator over matches of a pattern in `self`.  See
     /// `str::matches` for details.
     ///
@@ -561,13 +579,6 @@ macro_rules! make_iterator {
             }
         }
 
-        impl<'a, P> DoubleEndedIterator for $forward<'a, P>
-        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
-            fn next_back(&mut self) -> Option<$ret> {
-                self.inner.next_back().map($map)
-            }
-        }
-
         pub struct $reverse<'a, P> where P: Pattern<'a> {
             inner: inner::$reverse<'a, P>
         }
@@ -585,6 +596,16 @@ macro_rules! make_iterator {
                 self.inner.next().map($map)
             }
         }
+    };
+    ($forward:ident and $reverse:ident are double ended yield $map:expr => $ret:ty) => {
+        make_iterator!{$forward and $reverse yield $map => $ret}
+
+        impl<'a, P> DoubleEndedIterator for $forward<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+            fn next_back(&mut self) -> Option<$ret> {
+                self.inner.next_back().map($map)
+            }
+        }
 
         impl<'a, P> DoubleEndedIterator for $reverse<'a, P>
         where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
@@ -595,8 +616,9 @@ macro_rules! make_iterator {
     }
 }
 
-make_iterator!{Split and RSplit yield |s| OsStr::from_inner(s) => &'a OsStr}
-make_iterator!{Matches and RMatches yield |s| s => &'a str}
+make_iterator!{Split and RSplit are double ended yield |s| OsStr::from_inner(s) => &'a OsStr}
+make_iterator!{SplitN and RSplitN yield |s| OsStr::from_inner(s) => &'a OsStr}
+make_iterator!{Matches and RMatches are double ended yield |s| s => &'a str}
 
 
 impl<S: Borrow<OsStr>> LocalSliceConcatExt<OsStr> for [S] {
@@ -1041,6 +1063,51 @@ mod tests {
         assert_eq!(rsplit.next(), Some(&part3[..]));
         assert_eq!(rsplit.next_back(), Some(&part2[..]));
         assert_eq!(rsplit.next(), None);
+    }
+
+    #[test]
+    fn osstr_splitn() {
+        assert_eq!(OsStr::new("").splitn(2, 'a').collect::<Vec<_>>(), [OsStr::new("")]);
+        assert_eq!(OsStr::new("a").splitn(0, 'a').collect::<Vec<_>>(), [] as [&OsStr; 0]);
+        assert_eq!(OsStr::new("a").splitn(1, 'a').collect::<Vec<_>>(), [OsStr::new("a")]);
+
+        let part1 = non_utf8_osstring();
+        let mut part2 = non_utf8_osstring();
+        part2.push("aé 💩");
+        let part3 = OsString::from("aé 💩");
+        let mut string = part1.clone();
+        string.push("aΓ");
+        string.push(&part2);
+        string.push("aΓ");
+        string.push(&part3);
+        string.push("aΓ");
+        let mut end = part3.clone();
+        end.push("aΓ");
+        assert_eq!(string.splitn(3, "aΓ").collect::<Vec<_>>(),
+                   [&part1[..], &part2[..], &end[..]]);
+    }
+
+    #[test]
+    fn osstr_rsplitn() {
+        assert_eq!(OsStr::new("").rsplitn(2, 'a').collect::<Vec<_>>(), [OsStr::new("")]);
+        assert_eq!(OsStr::new("a").rsplitn(0, 'a').collect::<Vec<_>>(), [] as [&OsStr; 0]);
+        assert_eq!(OsStr::new("a").rsplitn(1, 'a').collect::<Vec<_>>(), [OsStr::new("a")]);
+
+        let part1 = non_utf8_osstring();
+        let mut part2 = non_utf8_osstring();
+        part2.push("aé 💩");
+        let part3 = OsString::from("aé 💩");
+        let mut string = part1.clone();
+        string.push("aΓ");
+        string.push(&part2);
+        let beginning = string.clone();
+        string.push("aΓ");
+        string.push(&part3);
+        string.push("aΓ");
+        let mut end = part3.clone();
+        end.push("aΓ");
+        assert_eq!(string.rsplitn(3, "aΓ").collect::<Vec<_>>(),
+                   [OsStr::new(""), &part3[..], &beginning[..]]);
     }
 
     #[test]
