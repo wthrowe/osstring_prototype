@@ -63,6 +63,8 @@ pub trait OsStrPrototyping {
         where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a>;
     fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a>;
     fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a>;
+    fn split_terminator<'a, P>(&'a self, pat: P) -> SplitTerminator<'a, P> where P: Pattern<'a>;
+    fn rsplit_terminator<'a, P>(&'a self, pat: P) -> RSplitTerminator<'a, P> where P: Pattern<'a>;
     fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P> where P: Pattern<'a>;
     fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P> where P: Pattern<'a>;
     fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P> where P: Pattern<'a>;
@@ -105,6 +107,12 @@ impl OsStrPrototyping for ffi::OsStr {
     fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a> {
         <&os_str::OsStr>::from(self).rsplit(pat).into()
     }
+    fn split_terminator<'a, P>(&'a self, pat: P) -> SplitTerminator<'a, P> where P: Pattern<'a> {
+        <&os_str::OsStr>::from(self).split_terminator(pat).into()
+    }
+    fn rsplit_terminator<'a, P>(&'a self, pat: P) -> RSplitTerminator<'a, P> where P: Pattern<'a> {
+        <&os_str::OsStr>::from(self).rsplit_terminator(pat).into()
+    }
     fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P> where P: Pattern<'a> {
         <&os_str::OsStr>::from(self).splitn(count, pat).into()
     }
@@ -131,68 +139,79 @@ impl OsStrPrototyping for ffi::OsStr {
     }
 }
 
-pub struct Split<'a, P> where P: Pattern<'a> {
-    inner: os_str::Split<'a, P>
-}
 
-impl<'a, P> Clone for Split<'a, P> where P: Pattern<'a> + Clone, P::Searcher: Clone {
-    fn clone(&self) -> Self { Split { inner: self.inner.clone() } }
-}
+macro_rules! forward_iterator {
+    ($forward:ident and $reverse:ident) => {
+        pub struct $forward<'a, P> where P: Pattern<'a> {
+            inner: os_str::$forward<'a, P>
+        }
 
-impl<'a, P> From<os_str::Split<'a, P>> for Split<'a, P> where P: Pattern<'a> {
-    fn from(x: os_str::Split<'a, P>) -> Split<'a, P> {
-        Split { inner: x }
+        impl<'a, P> Clone for $forward<'a, P> where P: Pattern<'a> + Clone, P::Searcher: Clone {
+            fn clone(&self) -> Self { $forward { inner: self.inner.clone() } }
+        }
+
+        impl<'a, P> From<os_str::$forward<'a, P>> for $forward<'a, P> where P: Pattern<'a> {
+            fn from(x: os_str::$forward<'a, P>) -> $forward<'a, P> {
+                $forward { inner: x }
+            }
+        }
+
+        impl<'a, P> Iterator for $forward<'a, P> where P: Pattern<'a> + Clone {
+            type Item = &'a ffi::OsStr;
+
+            fn next(&mut self) -> Option<&'a ffi::OsStr> {
+                self.inner.next().map(|x| x.into())
+            }
+        }
+
+        pub struct $reverse<'a, P> where P: Pattern<'a> {
+            inner: os_str::$reverse<'a, P>
+        }
+
+        impl<'a, P> Clone for $reverse<'a, P> where P: Pattern<'a> + Clone, P::Searcher: Clone {
+            fn clone(&self) -> Self { $reverse { inner: self.inner.clone() } }
+        }
+
+        impl<'a, P> From<os_str::$reverse<'a, P>> for $reverse<'a, P> where P: Pattern<'a> {
+            fn from(x: os_str::$reverse<'a, P>) -> $reverse<'a, P> {
+                $reverse { inner: x }
+            }
+        }
+
+        impl<'a, P> Iterator for $reverse<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
+            type Item = &'a ffi::OsStr;
+
+            fn next(&mut self) -> Option<&'a ffi::OsStr> {
+                self.inner.next().map(|x| x.into())
+            }
+        }
+    }
+}
+macro_rules! forward_double_ended {
+    ($forward:ident and $reverse:ident) => {
+        forward_iterator!{$forward and $reverse}
+
+        impl<'a, P> DoubleEndedIterator for $forward<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+            fn next_back(&mut self) -> Option<&'a ffi::OsStr> {
+                self.inner.next_back().map(|x| x.into())
+            }
+        }
+
+        impl<'a, P> DoubleEndedIterator for $reverse<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+            fn next_back(&mut self) -> Option<&'a ffi::OsStr> {
+                self.inner.next_back().map(|x| x.into())
+            }
+        }
     }
 }
 
-impl<'a, P> Iterator for Split<'a, P> where P: Pattern<'a> + Clone {
-    type Item = &'a ffi::OsStr;
-
-    fn next(&mut self) -> Option<&'a ffi::OsStr> {
-        self.inner.next().map(|x| x.into())
-    }
-}
-
-impl<'a, P> DoubleEndedIterator for Split<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
-    fn next_back(&mut self) -> Option<&'a ffi::OsStr> {
-        self.inner.next_back().map(|x| x.into())
-    }
-}
-
-
-pub struct RSplit<'a, P> where P: Pattern<'a> {
-    inner: os_str::RSplit<'a, P>
-}
-
-impl<'a, P> Clone for RSplit<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: Clone {
-    fn clone(&self) -> Self { RSplit { inner: self.inner.clone() } }
-}
-
-impl<'a, P> From<os_str::RSplit<'a, P>> for RSplit<'a, P> where P: Pattern<'a> {
-    fn from(x: os_str::RSplit<'a, P>) -> RSplit<'a, P> {
-        RSplit { inner: x }
-    }
-}
-
-impl<'a, P> Iterator for RSplit<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
-    type Item = &'a ffi::OsStr;
-
-    fn next(&mut self) -> Option<&'a ffi::OsStr> {
-        self.inner.next().map(|x| x.into())
-    }
-}
-
-impl<'a, P> DoubleEndedIterator for RSplit<'a, P>
-where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
-    fn next_back(&mut self) -> Option<&'a ffi::OsStr> {
-        self.inner.next_back().map(|x| x.into())
-    }
-}
-
-pub use os_str::{SplitN, RSplitN, Matches, RMatches};
+forward_double_ended!{Split and RSplit}
+forward_double_ended!{SplitTerminator and RSplitTerminator}
+forward_iterator!{SplitN and RSplitN}
+pub use os_str::{Matches, RMatches};
 
 
 impl<S: Borrow<ffi::OsStr>> LocalSliceConcatExt<ffi::OsStr> for [S] {
@@ -237,10 +256,18 @@ mod tests {
         assert!(string.contains("ll"));
         assert!(string.starts_with("he"));
         assert!(string.ends_with("lo"));
-        assert_eq!(string.split('l').collect::<Vec<_>>(), ["he", "", "o"]);
-        assert_eq!(string.rsplit('l').collect::<Vec<_>>(), ["o", "", "he"]);
-        assert_eq!(string.splitn(2, 'l').collect::<Vec<_>>(), ["he", "lo"]);
-        assert_eq!(string.rsplitn(2, 'l').collect::<Vec<_>>(), ["o", "hel"]);
+        assert_eq!(string.split('l').collect::<Vec<_>>(),
+                   [OsStr::new("he"), OsStr::new(""), OsStr::new("o")]);
+        assert_eq!(string.rsplit('l').collect::<Vec<_>>(),
+                   [OsStr::new("o"), OsStr::new(""), OsStr::new("he")]);
+        assert_eq!(string.split_terminator('o').collect::<Vec<_>>(),
+                   [OsStr::new("hell")]);
+        assert_eq!(string.rsplit_terminator('o').collect::<Vec<_>>(),
+                   [OsStr::new("hell")]);
+        assert_eq!(string.splitn(2, 'l').collect::<Vec<_>>(),
+                   [OsStr::new("he"), OsStr::new("lo")]);
+        assert_eq!(string.rsplitn(2, 'l').collect::<Vec<_>>(),
+                   [OsStr::new("o"), OsStr::new("hel")]);
         assert_eq!(string.matches('l').collect::<Vec<_>>(), ["l"; 2]);
         assert_eq!(string.rmatches('l').collect::<Vec<_>>(), ["l"; 2]);
         assert!(string.starts_with_str("he"));

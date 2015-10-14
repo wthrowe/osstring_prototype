@@ -39,10 +39,15 @@ macro_rules! make_iterator {
             }
         }
     };
-    ($forward:ident and $reverse:ident wrap $inner:ident with all impls
-     yielding $map:expr => $ret:ty) => {
+    ($forward:ident and $reverse:ident wrap $inner:ident yielding $map:expr => $ret:ty;
+     implement $($implement:ident)*) => {
         make_iterator!{$forward and $reverse wrap $inner yielding $map => $ret}
 
+        $(implement!{$implement for $forward and $reverse wrap $inner yielding $map => $ret})*
+    };
+}
+macro_rules! implement {
+    (new for $forward:ident and $reverse:ident wrap $inner:ident yielding $map:expr => $ret:ty) => {
         impl<'a, P> $forward<'a, P> where P: Pattern<'a> {
             pub fn new(slice: &'a [u8], pat: P) -> Self {
                 $forward($inner::new(slice, pat))
@@ -54,7 +59,8 @@ macro_rules! make_iterator {
                 $reverse($inner::new(slice, pat))
             }
         }
-
+    };
+    (DoubleEndedIterator for $forward:ident and $reverse:ident wrap $inner:ident yielding $map:expr => $ret:ty) => {
         impl<'a, P> DoubleEndedIterator for $forward<'a, P>
         where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
             fn next_back(&mut self) -> Option<$ret> {
@@ -71,9 +77,14 @@ macro_rules! make_iterator {
     };
 }
 
-make_iterator!{Matches and RMatches wrap MatchImpl with all impls yielding |x| x.1 => &'a str}
-make_iterator!{Split and RSplit wrap SplitImpl with all impls yielding |x| x => &'a [u8]}
+make_iterator!{Matches and RMatches wrap MatchImpl yielding |x| x.1 => &'a str;
+               implement new DoubleEndedIterator}
+make_iterator!{Split and RSplit wrap SplitImpl yielding |x| x => &'a [u8];
+               implement new DoubleEndedIterator}
 make_iterator!{SplitN and RSplitN wrap SplitNImpl yielding |x| x => &'a [u8]}
+make_iterator!{SplitTerminator and RSplitTerminator wrap SplitImpl
+               yielding |x| x => &'a [u8];
+               implement DoubleEndedIterator}
 
 impl<'a, P> SplitN<'a, P> where P: Pattern<'a> {
     pub fn new(slice: &'a [u8], count: usize, pat: P) -> Self {
@@ -84,6 +95,18 @@ impl<'a, P> SplitN<'a, P> where P: Pattern<'a> {
 impl<'a, P> RSplitN<'a, P> where P: Pattern<'a> {
     pub fn new(slice: &'a [u8], count: usize, pat: P) -> Self {
         RSplitN(SplitNImpl::new(slice, count, pat))
+    }
+}
+
+impl<'a, P> SplitTerminator<'a, P> where P: Pattern<'a> {
+    pub fn new(slice: &'a [u8], pat: P) -> Self {
+        SplitTerminator(SplitImpl::skipping_terminator(slice, pat, true))
+    }
+}
+
+impl<'a, P> RSplitTerminator<'a, P> where P: Pattern<'a> {
+    pub fn new(slice: &'a [u8], pat: P) -> Self {
+        RSplitTerminator(SplitImpl::skipping_terminator(slice, pat, true))
     }
 }
 
@@ -113,7 +136,7 @@ where P: Pattern<'a> + Clone, P::Searcher: Clone {
 }
 
 impl<'a, P> MatchImpl<'a, P> where P: Pattern<'a> {
-    pub fn new(slice: &'a [u8], pat: P) -> Self {
+    fn new(slice: &'a [u8], pat: P) -> Self {
         MatchImpl {
             pat: pat,
             sections: Utf8Sections::new(slice),
@@ -128,9 +151,14 @@ impl<'a, P> MatchImpl<'a, P> where P: Pattern<'a> {
         loop {
             if self.front_section.0 == self.back_section.0 {
                 // Last section.  Both directions use the same iterator.
-                let searcher = self.front_searcher.as_mut().or(self.back_searcher.as_mut());
-                let section = self.front_section;
-                return searcher.and_then(|m| m.next_match())
+                let (searcher, section) =
+                    match (self.front_searcher.as_mut(), self.back_searcher.as_mut()) {
+                        (Some(front), None) => (front, self.front_section),
+                        (None, Some(back)) => (back, self.back_section),
+                        (None, None) => return None,
+                        (Some(_), Some(_)) => unreachable!(),
+                    };
+                return searcher.next_match()
                     .map(|(start, end)| (section.0 + start, &section.1[start..end]));
             }
             if self.front_searcher.is_none() {
@@ -161,9 +189,14 @@ impl<'a, P> MatchImpl<'a, P> where P: Pattern<'a> {
         loop {
             if self.front_section.0 == self.back_section.0 {
                 // Last section.  Both directions use the same iterator.
-                let searcher = self.front_searcher.as_mut().or(self.back_searcher.as_mut());
-                let section = self.back_section;
-                return searcher.and_then(|m| m.next_match_back())
+                let (searcher, section) =
+                    match (self.front_searcher.as_mut(), self.back_searcher.as_mut()) {
+                        (Some(front), None) => (front, self.front_section),
+                        (None, Some(back)) => (back, self.back_section),
+                        (None, None) => return None,
+                        (Some(_), Some(_)) => unreachable!(),
+                    };
+                return searcher.next_match_back()
                     .map(|(start, end)| (section.0 + start, &section.1[start..end]));
             }
             if self.back_searcher.is_none() {
@@ -194,6 +227,7 @@ struct SplitImpl<'a, P> where P: Pattern<'a> {
     slice: &'a [u8],
     matches: MatchImpl<'a, P>,
     remainder: (usize, usize),
+    skip_terminator: bool,
 }
 
 impl<'a, P> Clone for SplitImpl<'a, P>
@@ -203,16 +237,22 @@ where P: Pattern<'a> + Clone, P::Searcher: Clone {
             slice: self.slice.clone(),
             matches: self.matches.clone(),
             remainder: self.remainder.clone(),
+            skip_terminator: self.skip_terminator.clone(),
         }
     }
 }
 
 impl<'a, P> SplitImpl<'a, P> where P: Pattern<'a> {
-    pub fn new(slice: &'a [u8], pat: P) -> Self {
+    fn new(slice: &'a [u8], pat: P) -> Self {
+        Self::skipping_terminator(slice, pat, false)
+    }
+
+    fn skipping_terminator(slice: &'a [u8], pat: P, skip_terminator: bool) -> Self {
         SplitImpl {
             slice: slice,
             matches: MatchImpl::new(slice, pat),
             remainder: (0, slice.len()),
+            skip_terminator: skip_terminator,
         }
     }
 
@@ -227,8 +267,15 @@ impl<'a, P> SplitImpl<'a, P> where P: Pattern<'a> {
             // have the section between the last matches from
             // either side to return.
             let result = &self.slice[self.remainder.0..self.remainder.1];
+            // Skip the last entry if we've been asked to and it
+            // starts at the end of the slice.
+            let result = if self.skip_terminator && self.remainder.0 == self.slice.len() {
+                None
+            } else {
+                Some(result)
+            };
             self.remainder.0 = self.remainder.1 + 1;
-            Some(result)
+            return result;
         }
     }
 
@@ -238,14 +285,27 @@ impl<'a, P> SplitImpl<'a, P> where P: Pattern<'a> {
         if let Some((start, mat)) = self.matches.next_back() {
             let result = &self.slice[start + mat.len()..self.remainder.1];
             self.remainder.1 = start;
-            Some(result)
+            // Skip the value if we've been asked to and it starts at
+            // the end of the slice.
+            if self.skip_terminator && start + mat.len() == self.slice.len() {
+                self.next_back()
+            } else {
+                Some(result)
+            }
         } else {
             // We've exhausted all the matches, but we still
             // have the section between the last matches from
             // either side to return.
             let result = &self.slice[self.remainder.0..self.remainder.1];
+            // Skip the last entry if we've been asked to and it
+            // starts at the end of the slice.
+            let result = if self.skip_terminator && self.remainder.0 == self.slice.len() {
+                None
+            } else {
+                Some(result)
+            };
             self.remainder.0 = self.remainder.1 + 1;
-            Some(result)
+            return result;
         }
     }
 
@@ -272,7 +332,7 @@ where P: Pattern<'a> + Clone, P::Searcher: Clone {
 }
 
 impl<'a, P> SplitNImpl<'a, P> where P: Pattern<'a> {
-    pub fn new(slice: &'a [u8], count: usize, pat: P) -> Self {
+    fn new(slice: &'a [u8], count: usize, pat: P) -> Self {
         SplitNImpl {
             split: SplitImpl::new(slice, pat),
             count: count,

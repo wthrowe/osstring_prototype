@@ -140,6 +140,16 @@ impl Slice {
         RSplit { inner: self.inner.rsplit(pat) }
     }
 
+    pub fn split_terminator<'a, P>(&'a self, pat: P) -> SplitTerminator<'a, P>
+    where P: Pattern<'a> {
+        SplitTerminator { inner: self.inner.split_terminator(pat) }
+    }
+
+    pub fn rsplit_terminator<'a, P>(&'a self, pat: P) -> RSplitTerminator<'a, P>
+    where P: Pattern<'a> {
+        RSplitTerminator { inner: self.inner.rsplit_terminator(pat) }
+    }
+
     pub fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P> where P: Pattern<'a> {
         SplitN { inner: self.inner.splitn(count, pat) }
     }
@@ -208,6 +218,10 @@ macro_rules! make_iterator {
 make_iterator!{Split requires Searcher is double ended
                yielding Slice::from_wtf8 => &'a Slice}
 make_iterator!{RSplit requires ReverseSearcher is double ended
+               yielding Slice::from_wtf8 => &'a Slice}
+make_iterator!{SplitTerminator requires Searcher is double ended
+               yielding Slice::from_wtf8 => &'a Slice}
+make_iterator!{RSplitTerminator requires ReverseSearcher is double ended
                yielding Slice::from_wtf8 => &'a Slice}
 make_iterator!{SplitN requires Searcher yielding Slice::from_wtf8 => &'a Slice}
 make_iterator!{RSplitN requires ReverseSearcher yielding Slice::from_wtf8 => &'a Slice}

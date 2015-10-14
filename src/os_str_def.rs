@@ -383,6 +383,24 @@ impl OsStr {
         RSplit { inner: self.inner.rsplit(pat) }
     }
 
+    /// Equivalent to `split`, except the trailing substring is
+    /// skipped if empty.  See `str::split_terminator` for details.
+    ///
+    /// Note that patterns can only match UTF-8 sections of the `OsStr`.
+    pub fn split_terminator<'a, P>(&'a self, pat: P) -> SplitTerminator<'a, P>
+    where P: Pattern<'a> {
+        SplitTerminator { inner: self.inner.split_terminator(pat) }
+    }
+
+    /// Equivalent to `rsplit`, except the trailing substring is
+    /// skipped if empty.  See `str::rsplit_terminator` for details.
+    ///
+    /// Note that patterns can only match UTF-8 sections of the `OsStr`.
+    pub fn rsplit_terminator<'a, P>(&'a self, pat: P) -> RSplitTerminator<'a, P>
+    where P: Pattern<'a> {
+        RSplitTerminator { inner: self.inner.rsplit_terminator(pat) }
+    }
+
     /// An iterator over substrings of `self` separated by characters
     /// matched by a pattern, restricted to returning at most `count`
     /// items.  See `str::splitn` for details.
@@ -617,6 +635,8 @@ macro_rules! make_iterator {
 }
 
 make_iterator!{Split and RSplit are double ended yield |s| OsStr::from_inner(s) => &'a OsStr}
+make_iterator!{SplitTerminator and RSplitTerminator are double ended
+               yield |s| OsStr::from_inner(s) => &'a OsStr}
 make_iterator!{SplitN and RSplitN yield |s| OsStr::from_inner(s) => &'a OsStr}
 make_iterator!{Matches and RMatches are double ended yield |s| s => &'a str}
 
@@ -986,6 +1006,58 @@ mod tests {
 
         assert_eq!(OsStr::new("aaa").split("aa").collect::<Vec<_>>(),
                    [OsStr::new(""), OsStr::new("a")]);
+    }
+
+    #[test]
+    fn osstr_split_terminator() {
+        assert!(OsStr::new("").split_terminator('a').next().is_none());
+        assert!(OsStr::new("").split_terminator('a').next_back().is_none());
+        assert_eq!(OsStr::new("a").split_terminator('a').collect::<Vec<_>>(),
+                   [OsStr::new("")]);
+        assert_eq!(OsStr::new("a").split_terminator('a').rev().collect::<Vec<_>>(),
+                   [OsStr::new("")]);
+
+        let string = OsStr::new("xΓΓx");
+        assert_eq!(string.split_terminator('x').collect::<Vec<_>>(),
+                   [OsStr::new(""), OsStr::new("ΓΓ")]);
+        assert_eq!(string.split_terminator('Γ').collect::<Vec<_>>(),
+                   [OsStr::new("x"), OsStr::new(""), OsStr::new("x")]);
+        assert_eq!(string.split_terminator('x').rev().collect::<Vec<_>>(),
+                   [OsStr::new("ΓΓ"), OsStr::new("")]);
+        assert_eq!(string.split_terminator('Γ').rev().collect::<Vec<_>>(),
+                   [OsStr::new("x"), OsStr::new(""), OsStr::new("x")]);
+
+        let mut split = string.split_terminator('Γ');
+        assert_eq!(split.next(), Some(OsStr::new("x")));
+        assert_eq!(split.next_back(), Some(OsStr::new("x")));
+        assert_eq!(split.clone().next(), Some(OsStr::new("")));
+        assert_eq!(split.next_back(), Some(OsStr::new("")));
+    }
+
+    #[test]
+    fn osstr_rsplit_terminator() {
+        assert!(OsStr::new("").rsplit_terminator('a').next().is_none());
+        assert!(OsStr::new("").rsplit_terminator('a').next_back().is_none());
+        assert_eq!(OsStr::new("a").rsplit_terminator('a').collect::<Vec<_>>(),
+                   [OsStr::new("")]);
+        assert_eq!(OsStr::new("a").rsplit_terminator('a').rev().collect::<Vec<_>>(),
+                   [OsStr::new("")]);
+
+        let string = OsStr::new("xΓΓx");
+        assert_eq!(string.rsplit_terminator('x').collect::<Vec<_>>(),
+                   [OsStr::new("ΓΓ"), OsStr::new("")]);
+        assert_eq!(string.rsplit_terminator('Γ').collect::<Vec<_>>(),
+                   [OsStr::new("x"), OsStr::new(""), OsStr::new("x")]);
+        assert_eq!(string.rsplit_terminator('x').rev().collect::<Vec<_>>(),
+                   [OsStr::new(""), OsStr::new("ΓΓ")]);
+        assert_eq!(string.rsplit_terminator('Γ').rev().collect::<Vec<_>>(),
+                   [OsStr::new("x"), OsStr::new(""), OsStr::new("x")]);
+
+        let mut split = string.rsplit_terminator('Γ');
+        assert_eq!(split.next(), Some(OsStr::new("x")));
+        assert_eq!(split.next_back(), Some(OsStr::new("x")));
+        assert_eq!(split.clone().next(), Some(OsStr::new("")));
+        assert_eq!(split.next_back(), Some(OsStr::new("")));
     }
 
     #[test]

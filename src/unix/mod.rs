@@ -139,6 +139,16 @@ impl Slice {
         RSplit { inner: split_bytes::RSplit::new(&self.inner, pat) }
     }
 
+    pub fn split_terminator<'a, P>(&'a self, pat: P) -> SplitTerminator<'a, P>
+    where P: Pattern<'a> {
+        SplitTerminator { inner: split_bytes::SplitTerminator::new(&self.inner, pat) }
+    }
+
+    pub fn rsplit_terminator<'a, P>(&'a self, pat: P) -> RSplitTerminator<'a, P>
+    where P: Pattern<'a> {
+        RSplitTerminator { inner: split_bytes::RSplitTerminator::new(&self.inner, pat) }
+    }
+
     pub fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P> where P: Pattern<'a> {
         SplitN { inner: split_bytes::SplitN::new(&self.inner, count, pat) }
     }
@@ -223,6 +233,10 @@ macro_rules! make_iterator {
 make_iterator!{Split requires Searcher is double ended
                yielding Slice::from_u8_slice => &'a Slice}
 make_iterator!{RSplit requires ReverseSearcher is double ended
+               yielding Slice::from_u8_slice => &'a Slice}
+make_iterator!{SplitTerminator requires Searcher is double ended
+               yielding Slice::from_u8_slice => &'a Slice}
+make_iterator!{RSplitTerminator requires ReverseSearcher is double ended
                yielding Slice::from_u8_slice => &'a Slice}
 make_iterator!{SplitN requires Searcher yielding Slice::from_u8_slice => &'a Slice}
 make_iterator!{RSplitN requires ReverseSearcher yielding Slice::from_u8_slice => &'a Slice}
