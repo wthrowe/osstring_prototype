@@ -1980,6 +1980,14 @@ mod tests {
     }
 
     #[test]
+    fn wtf8_matches_replacement() {
+        let mut non_utf8 = Wtf8Buf::new();
+        non_utf8.push(CodePoint::from_u32(0xD800).unwrap());
+        let replacement = non_utf8.to_string_lossy().into_owned();
+        assert!(non_utf8.matches(&replacement).next().is_none());
+    }
+
+    #[test]
     fn wtf8_starts_with_str() {
         assert!(Wtf8::from_str("").starts_with_str(""));
         assert!(Wtf8::from_str("ab").starts_with_str(""));

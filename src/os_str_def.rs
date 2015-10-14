@@ -952,6 +952,11 @@ mod tests {
     }
 
     #[test]
+    fn osstr_contains_replacement() {
+        assert!(!non_utf8_osstring().contains(&non_utf8_osstring().into_string_lossy()));
+    }
+
+    #[test]
     fn osstr_starts_with() {
         assert!(OsStr::new("").starts_with(""));
         assert!(!OsStr::new("").starts_with('a'));
