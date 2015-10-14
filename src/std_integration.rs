@@ -63,6 +63,8 @@ pub trait OsStrPrototyping {
         where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a>;
     fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a>;
     fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a>;
+    fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P> where P: Pattern<'a>;
+    fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P> where P: Pattern<'a>;
     fn starts_with_str(&self, prefix: &str) -> bool;
     fn remove_prefix_str(&self, prefix: &str) -> Option<&Self>;
     fn slice_shift_char(&self) -> Option<(char, &Self)>;
@@ -100,6 +102,12 @@ impl OsStrPrototyping for ffi::OsStr {
     }
     fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a> {
         <&os_str::OsStr>::from(self).rsplit(pat).into()
+    }
+    fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P> where P: Pattern<'a> {
+        <&os_str::OsStr>::from(self).matches(pat).into()
+    }
+    fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P> where P: Pattern<'a> {
+        <&os_str::OsStr>::from(self).rmatches(pat).into()
     }
     fn starts_with_str(&self, prefix: &str) -> bool {
         <&os_str::OsStr>::from(self).starts_with_str(prefix)
@@ -176,6 +184,8 @@ where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
     }
 }
 
+pub use os_str::{Matches, RMatches};
+
 
 impl<S: Borrow<ffi::OsStr>> LocalSliceConcatExt<ffi::OsStr> for [S] {
     type Output = ffi::OsString;
@@ -221,6 +231,8 @@ mod tests {
         assert!(string.ends_with("lo"));
         assert_eq!(string.split('l').collect::<Vec<_>>(), ["he", "", "o"]);
         assert_eq!(string.rsplit('l').collect::<Vec<_>>(), ["o", "", "he"]);
+        assert_eq!(string.matches('l').collect::<Vec<_>>(), ["l"; 2]);
+        assert_eq!(string.rmatches('l').collect::<Vec<_>>(), ["l"; 2]);
         assert!(string.starts_with_str("he"));
         assert_eq!(string.remove_prefix_str("he"), Some(OsStr::new("llo")));
         assert_eq!(string.slice_shift_char(), Some(('h', OsStr::new("ello"))));

@@ -139,6 +139,14 @@ impl Slice {
         RSplit { inner: split_bytes::RSplit::new(&self.inner, pat) }
     }
 
+    pub fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P> where P: Pattern<'a> {
+        Matches { inner: split_bytes::Matches::new(&self.inner, pat) }
+    }
+
+    pub fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P> where P: Pattern<'a> {
+        RMatches { inner: split_bytes::RMatches::new(&self.inner, pat) }
+    }
+
     pub fn starts_with_str(&self, prefix: &str) -> bool {
         self.inner.starts_with(prefix.as_bytes())
     }
@@ -172,8 +180,8 @@ impl Slice {
     }
 }
 
-macro_rules! make_split {
-    ($name:ident requires $bound:ident) => {
+macro_rules! make_iterator {
+    ($name:ident requires $bound:ident yielding $map:expr => $ret:ty) => {
         pub struct $name<'a, P> where P: Pattern<'a> {
             inner: split_bytes::$name<'a, P>,
         }
@@ -185,28 +193,30 @@ macro_rules! make_split {
 
         impl<'a, P> Iterator for $name<'a, P>
         where P: Pattern<'a> + Clone, P::Searcher: $bound<'a> {
-            type Item = &'a Slice;
+            type Item = $ret;
 
-            fn next(&mut self) -> Option<&'a Slice> {
-                self.inner.next().map(Slice::from_u8_slice)
+            fn next(&mut self) -> Option<$ret> {
+                self.inner.next().map($map)
             }
         }
 
         impl<'a, P> DoubleEndedIterator for $name<'a, P>
         where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
-            fn next_back(&mut self) -> Option<&'a Slice> {
-                self.inner.next_back().map(Slice::from_u8_slice)
+            fn next_back(&mut self) -> Option<$ret> {
+                self.inner.next_back().map($map)
             }
         }
     }
 }
 
-make_split!{Split requires Searcher}
-make_split!{RSplit requires ReverseSearcher}
-
+make_iterator!{Split requires Searcher yielding Slice::from_u8_slice => &'a Slice}
+make_iterator!{RSplit requires ReverseSearcher yielding Slice::from_u8_slice => &'a Slice}
+make_iterator!{Matches requires Searcher yielding |x| x => &'a str}
+make_iterator!{RMatches requires ReverseSearcher yielding |x| x => &'a str}
 
 pub mod os_str {
-    use super::{Buf, Slice, Split as ImplSplit, RSplit as ImplRSplit};
+    use super::{Buf, Slice};
+    mod inner { pub use super::super::*; }
 
     macro_rules! is_windows { () => { false } }
     macro_rules! if_unix_windows { (unix $u:block windows $w:block) => { $u } }
