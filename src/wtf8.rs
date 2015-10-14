@@ -1910,8 +1910,7 @@ mod tests {
     fn wtf8_splitn() {
         assert_eq!(Wtf8::from_str("").splitn(2, 'a').collect::<Vec<_>>(),
                    [Wtf8::from_str("")]);
-        assert_eq!(Wtf8::from_str("a").splitn(0, 'a').collect::<Vec<_>>(),
-                   [] as [&Wtf8; 0]);
+        assert!(Wtf8::from_str("a").splitn(0, 'a').next().is_none());
         assert_eq!(Wtf8::from_str("a").splitn(1, 'a').collect::<Vec<_>>(),
                    [Wtf8::from_str("a")]);
 
@@ -1933,8 +1932,7 @@ mod tests {
     fn wtf8_rsplitn() {
         assert_eq!(Wtf8::from_str("").rsplitn(2, 'a').collect::<Vec<_>>(),
                    [Wtf8::from_str("")]);
-        assert_eq!(Wtf8::from_str("a").rsplitn(0, 'a').collect::<Vec<_>>(),
-                   [] as [&Wtf8; 0]);
+        assert!(Wtf8::from_str("a").rsplitn(0, 'a').next().is_none());
         assert_eq!(Wtf8::from_str("a").rsplitn(1, 'a').collect::<Vec<_>>(),
                    [Wtf8::from_str("a")]);
 
@@ -1953,8 +1951,7 @@ mod tests {
 
     #[test]
     fn wtf8_matches() {
-        assert_eq!(Wtf8::from_str("").matches('a').collect::<Vec<_>>(),
-                   [] as [&str; 0]);
+        assert!(Wtf8::from_str("").matches('a').next().is_none());
 
         let mut non_utf8 = Wtf8Buf::new();
         non_utf8.push(CodePoint::from_u32(0xD800).unwrap());
@@ -1969,8 +1966,7 @@ mod tests {
 
     #[test]
     fn wtf8_rmatches() {
-        assert_eq!(Wtf8::from_str("").rmatches('a').collect::<Vec<_>>(),
-                   [] as [&str; 0]);
+        assert!(Wtf8::from_str("").rmatches('a').next().is_none());
 
         let mut non_utf8 = Wtf8Buf::new();
         non_utf8.push(CodePoint::from_u32(0xD800).unwrap());

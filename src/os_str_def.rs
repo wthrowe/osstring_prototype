@@ -1140,7 +1140,7 @@ mod tests {
     #[test]
     fn osstr_splitn() {
         assert_eq!(OsStr::new("").splitn(2, 'a').collect::<Vec<_>>(), [OsStr::new("")]);
-        assert_eq!(OsStr::new("a").splitn(0, 'a').collect::<Vec<_>>(), [] as [&OsStr; 0]);
+        assert!(OsStr::new("a").splitn(0, 'a').next().is_none());
         assert_eq!(OsStr::new("a").splitn(1, 'a').collect::<Vec<_>>(), [OsStr::new("a")]);
 
         let part1 = non_utf8_osstring();
@@ -1162,7 +1162,7 @@ mod tests {
     #[test]
     fn osstr_rsplitn() {
         assert_eq!(OsStr::new("").rsplitn(2, 'a').collect::<Vec<_>>(), [OsStr::new("")]);
-        assert_eq!(OsStr::new("a").rsplitn(0, 'a').collect::<Vec<_>>(), [] as [&OsStr; 0]);
+        assert!(OsStr::new("a").rsplitn(0, 'a').next().is_none());
         assert_eq!(OsStr::new("a").rsplitn(1, 'a').collect::<Vec<_>>(), [OsStr::new("a")]);
 
         let part1 = non_utf8_osstring();
@@ -1184,8 +1184,7 @@ mod tests {
 
     #[test]
     fn osstr_matches() {
-        assert_eq!(OsStr::new("").matches('a').collect::<Vec<_>>(),
-                   [] as [&str; 0]);
+        assert!(OsStr::new("").matches('a').next().is_none());
 
         let mut string = non_utf8_osstring();
         string.push("aΓabΓaΓaΓ");
@@ -1201,8 +1200,7 @@ mod tests {
 
     #[test]
     fn osstr_matches_double_ended() {
-        assert_eq!(OsStr::new("").matches('a').rev().collect::<Vec<_>>(),
-                   [] as [&str; 0]);
+        assert!(OsStr::new("").matches('a').next_back().is_none());
 
         let mut string = non_utf8_osstring();
         string.push("aΓ");
@@ -1221,8 +1219,7 @@ mod tests {
 
     #[test]
     fn osstr_rmatches() {
-        assert_eq!(OsStr::new("").rmatches('a').collect::<Vec<_>>(),
-                   [] as [&str; 0]);
+        assert!(OsStr::new("").rmatches('a').next().is_none());
 
         let mut string = non_utf8_osstring();
         string.push("aΓabΓaΓaΓ");
@@ -1238,8 +1235,7 @@ mod tests {
 
     #[test]
     fn osstr_rmatches_double_ended() {
-        assert_eq!(OsStr::new("").rmatches('a').rev().collect::<Vec<_>>(),
-                   [] as [&str; 0]);
+        assert!(OsStr::new("").rmatches('a').next_back().is_none());
 
         let mut string = non_utf8_osstring();
         string.push("aΓ");
