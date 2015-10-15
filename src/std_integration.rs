@@ -54,6 +54,8 @@ impl OsStringPrototyping for ffi::OsString {
 pub trait OsStrPrototyping {
     fn is_empty(&self) -> bool;
     fn len(&self) -> usize;
+    fn split_whitespace<'a>(&'a self) -> SplitWhitespace<'a>;
+    fn lines<'a>(&'a self) -> Lines<'a>;
     fn contains_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool;
     fn starts_with_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool;
     fn ends_with_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool;
@@ -69,6 +71,14 @@ pub trait OsStrPrototyping {
     fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P> where P: Pattern<'a>;
     fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P> where P: Pattern<'a>;
     fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P> where P: Pattern<'a>;
+    fn trim(&self) -> &Self;
+    fn trim_left(&self) -> &Self;
+    fn trim_right(&self) -> &Self;
+    fn trim_matches<'a, P>(&'a self, pat: P) -> &'a Self
+    where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a>;
+    fn trim_left_matches<'a, P>(&'a self, pat: P) -> &Self where P: Pattern<'a>;
+    fn trim_right_matches<'a, P>(&'a self, pat: P) -> &Self
+    where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a>;
     fn starts_with_str(&self, prefix: &str) -> bool;
     fn remove_prefix_str(&self, prefix: &str) -> Option<&Self>;
     fn slice_shift_char(&self) -> Option<(char, &Self)>;
@@ -81,6 +91,12 @@ impl OsStrPrototyping for ffi::OsStr {
     }
     fn len(&self) -> usize {
         <&os_str::OsStr>::from(self).len()
+    }
+    fn split_whitespace<'a>(&'a self) -> SplitWhitespace<'a> {
+        <&os_str::OsStr>::from(self).split_whitespace().into()
+    }
+    fn lines<'a>(&'a self) -> Lines<'a> {
+        <&os_str::OsStr>::from(self).lines().into()
     }
     fn contains_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool {
         <&os_str::OsStr>::from(self).contains_os(<&os_str::OsStr>::from(needle.as_ref()))
@@ -125,6 +141,26 @@ impl OsStrPrototyping for ffi::OsStr {
     fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P> where P: Pattern<'a> {
         <&os_str::OsStr>::from(self).rmatches(pat).into()
     }
+    fn trim(&self) -> &Self {
+        <&os_str::OsStr>::from(self).trim().into()
+    }
+    fn trim_left(&self) -> &Self {
+        <&os_str::OsStr>::from(self).trim_left().into()
+    }
+    fn trim_right(&self) -> &Self {
+        <&os_str::OsStr>::from(self).trim_right().into()
+    }
+    fn trim_matches<'a, P>(&'a self, pat: P) -> &'a Self
+    where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+        <&os_str::OsStr>::from(self).trim_matches(pat).into()
+    }
+    fn trim_left_matches<'a, P>(&'a self, pat: P) -> &Self where P: Pattern<'a> {
+        <&os_str::OsStr>::from(self).trim_left_matches(pat).into()
+    }
+    fn trim_right_matches<'a, P>(&'a self, pat: P) -> &Self
+    where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
+        <&os_str::OsStr>::from(self).trim_right_matches(pat).into()
+    }
     fn starts_with_str(&self, prefix: &str) -> bool {
         <&os_str::OsStr>::from(self).starts_with_str(prefix)
     }
@@ -140,6 +176,34 @@ impl OsStrPrototyping for ffi::OsStr {
 }
 
 
+macro_rules! forward_iterator_simple {
+    ($name:ident) => {
+        #[derive(Clone)]
+        pub struct $name<'a> {
+            inner: os_str::$name<'a>
+        }
+
+        impl<'a> From<os_str::$name<'a>> for $name<'a> {
+            fn from(x: os_str::$name<'a>) -> $name<'a> {
+                $name { inner: x }
+            }
+        }
+
+        impl<'a> Iterator for $name<'a> {
+            type Item = &'a ffi::OsStr;
+
+            fn next(&mut self) -> Option<&'a ffi::OsStr> {
+                self.inner.next().map(|x| x.into())
+            }
+        }
+
+        impl<'a> DoubleEndedIterator for $name<'a> {
+            fn next_back(&mut self) -> Option<&'a ffi::OsStr> {
+                self.inner.next_back().map(|x| x.into())
+            }
+        }
+    }
+}
 macro_rules! forward_iterator {
     ($forward:ident and $reverse:ident) => {
         pub struct $forward<'a, P> where P: Pattern<'a> {
@@ -208,6 +272,8 @@ macro_rules! forward_double_ended {
     }
 }
 
+forward_iterator_simple!{SplitWhitespace}
+forward_iterator_simple!{Lines}
 forward_double_ended!{Split and RSplit}
 forward_double_ended!{SplitTerminator and RSplitTerminator}
 forward_iterator!{SplitN and RSplitN}
@@ -250,6 +316,10 @@ mod tests {
         let string = OsString::from("hello");
         assert!(!string.is_empty());
         assert_eq!(string.len(), 5);
+        assert_eq!(OsStr::new("\nHello  World").split_whitespace().collect::<Vec<_>>(),
+                   [OsStr::new("Hello"), OsStr::new("World")]);
+        assert_eq!(OsStr::new("\nHello\n  World").lines().collect::<Vec<_>>(),
+                   [OsStr::new(""), OsStr::new("Hello"), OsStr::new("  World")]);
         assert!(string.contains_os(OsStr::new("ll")));
         assert!(string.starts_with_os(OsStr::new("he")));
         assert!(string.ends_with_os(OsStr::new("lo")));
@@ -270,6 +340,12 @@ mod tests {
                    [OsStr::new("o"), OsStr::new("hel")]);
         assert_eq!(string.matches('l').collect::<Vec<_>>(), ["l"; 2]);
         assert_eq!(string.rmatches('l').collect::<Vec<_>>(), ["l"; 2]);
+        assert_eq!(OsStr::new(" \nHello World ").trim(), OsStr::new("Hello World"));
+        assert_eq!(OsStr::new(" \nHello World ").trim_left(), OsStr::new("Hello World "));
+        assert_eq!(OsStr::new(" \nHello World ").trim_right(), OsStr::new(" \nHello World"));
+        assert_eq!(OsStr::new("aabcaa").trim_matches('a'), OsStr::new("bc"));
+        assert_eq!(OsStr::new("aabcaa").trim_left_matches('a'), OsStr::new("bcaa"));
+        assert_eq!(OsStr::new("aabcaa").trim_right_matches('a'), OsStr::new("aabc"));
         assert!(string.starts_with_str("he"));
         assert_eq!(string.remove_prefix_str("he"), Some(OsStr::new("llo")));
         assert_eq!(string.slice_shift_char(), Some(('h', OsStr::new("ello"))));

@@ -166,6 +166,21 @@ impl Slice {
         RMatches { inner: self.inner.rmatches(pat) }
     }
 
+    pub fn trim_matches<'a, P>(&'a self, pat: P) -> &'a Slice
+    where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+        Self::from_wtf8(self.inner.trim_matches(pat))
+    }
+
+    pub fn trim_left_matches<'a, P>(&'a self, pat: P) -> &'a Slice
+    where P: Pattern<'a> {
+        Self::from_wtf8(self.inner.trim_left_matches(pat))
+    }
+
+    pub fn trim_right_matches<'a, P>(&'a self, pat: P) -> &'a Slice
+    where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
+        Self::from_wtf8(self.inner.trim_right_matches(pat))
+    }
+
     pub fn starts_with_str(&self, prefix: &str) -> bool {
         self.inner.starts_with_str(prefix)
     }

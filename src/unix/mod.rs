@@ -165,6 +165,21 @@ impl Slice {
         RMatches { inner: split_bytes::RMatches::new(&self.inner, pat) }
     }
 
+    pub fn trim_matches<'a, P>(&'a self, pat: P) -> &'a Slice
+    where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+        Self::from_u8_slice(split_bytes::trim_matches(&self.inner, pat))
+    }
+
+    pub fn trim_left_matches<'a, P>(&'a self, pat: P) -> &'a Slice
+    where P: Pattern<'a> {
+        Self::from_u8_slice(split_bytes::trim_left_matches(&self.inner, pat))
+    }
+
+    pub fn trim_right_matches<'a, P>(&'a self, pat: P) -> &'a Slice
+    where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
+        Self::from_u8_slice(split_bytes::trim_right_matches(&self.inner, pat))
+    }
+
     pub fn starts_with_str(&self, prefix: &str) -> bool {
         self.inner.starts_with(prefix.as_bytes())
     }

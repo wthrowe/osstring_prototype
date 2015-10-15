@@ -40,6 +40,7 @@ use core::str::pattern::{DoubleEndedSearcher, Pattern, ReverseSearcher};
 use std::borrow::{Borrow, Cow, ToOwned};
 use std::ffi::CString;
 use std::fmt::{self, Debug};
+use std::iter::{Filter, Map};
 use std::mem;
 use slice_concat_ext::LocalSliceConcatExt;
 use std::string::String;
@@ -329,6 +330,19 @@ impl OsStr {
         unsafe { mem::transmute(&self.inner) }
     }
 
+    /// An iterator over the non-empty substrings of `self` that
+    /// contain no whitespace and are separated by whitespace.
+    pub fn split_whitespace<'a>(&'a self) -> SplitWhitespace<'a> {
+        SplitWhitespace::new(self)
+    }
+
+    /// An iterator over the lines of `self`, separated by `\n` of
+    /// `\r\n`.  This does not return an empty string after a trailing
+    /// `\n`.
+    pub fn lines<'a>(&'a self) -> Lines<'a> {
+        Lines::new(self)
+    }
+
     /// Returns true if `needle` is a substring of `self`.
     pub fn contains_os<S: AsRef<OsStr>>(&self, needle: S) -> bool {
         self.inner.contains_os(&needle.as_ref().inner)
@@ -433,6 +447,42 @@ impl OsStr {
     /// Note that patterns can only match UTF-8 sections of the `OsStr`.
     pub fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P> where P: Pattern<'a> {
         RMatches { inner: self.inner.rmatches(pat) }
+    }
+
+    /// Returns a `&OsStr` with leading and trailing whitespace removed.
+    pub fn trim(&self) -> &OsStr {
+        self.trim_matches(char::is_whitespace as fn(char) -> bool)
+    }
+
+    /// Returns a `&OsStr` with leading whitespace removed.
+    pub fn trim_left(&self) -> &OsStr {
+        self.trim_left_matches(char::is_whitespace)
+    }
+
+    /// Returns a `&OsStr` with trailing whitespace removed.
+    pub fn trim_right(&self) -> &OsStr {
+        self.trim_right_matches(char::is_whitespace)
+    }
+
+    /// Returns a `&OsStr` with leading and trailing matches of `pat`
+    /// repeatedly removed.
+    pub fn trim_matches<'a, P>(&'a self, pat: P) -> &'a OsStr
+    where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+        Self::from_inner(self.inner.trim_matches(pat))
+    }
+
+    /// Returns a `&OsStr` with leading matches of `pat` repeatedly
+    /// removed.
+    pub fn trim_left_matches<'a, P>(&'a self, pat: P) -> &'a OsStr
+    where P: Pattern<'a> {
+        Self::from_inner(self.inner.trim_left_matches(pat))
+    }
+
+    /// Returns a `&OsStr` with trailing matches of `pat` repeatedly
+    /// removed.
+    pub fn trim_right_matches<'a, P>(&'a self, pat: P) -> &'a OsStr
+    where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
+        Self::from_inner(self.inner.trim_right_matches(pat))
     }
 
     /// Returns true if the string starts with a valid UTF-8 sequence
@@ -575,6 +625,65 @@ impl AsInner<Slice> for OsStr {
     fn as_inner(&self) -> &Slice {
         &self.inner
     }
+}
+
+#[derive(Clone)]
+pub struct SplitWhitespace<'a>(Filter<Split<'a, fn(char) -> bool>, OsStrNonEmptyHack>);
+
+// Functions have issues with Clone sometimes
+#[derive(Clone)]
+struct OsStrNonEmptyHack;
+
+impl<'a, 'b> FnOnce<(&'b &'a OsStr,)> for OsStrNonEmptyHack {
+    type Output = bool;
+    extern "rust-call" fn call_once(mut self, args: (&&OsStr,)) -> bool { self.call_mut(args) }
+}
+
+impl<'a, 'b> FnMut<(&'b &'a OsStr,)> for OsStrNonEmptyHack {
+    extern "rust-call" fn call_mut(&mut self, (&s,): (&&OsStr,)) -> bool { !s.is_empty() }
+}
+
+impl<'a> SplitWhitespace<'a> {
+    fn new(string: &'a OsStr) -> Self {
+        SplitWhitespace(string.split(char::is_whitespace as fn(char) -> bool)
+                        .filter(OsStrNonEmptyHack))
+    }
+}
+
+impl<'a> Iterator for SplitWhitespace<'a> {
+    type Item = &'a OsStr;
+    fn next(&mut self) -> Option<&'a OsStr> { self.0.next() }
+}
+
+impl<'a> DoubleEndedIterator for SplitWhitespace<'a> {
+    fn next_back(&mut self) -> Option<&'a OsStr> { self.0.next_back() }
+}
+
+#[derive(Clone)]
+pub struct Lines<'a>(Map<SplitTerminator<'a, char>, fn(&'a OsStr) -> &'a OsStr>);
+
+impl<'a> Lines<'a> {
+    fn new(string: &'a OsStr) -> Self {
+        fn remove_cr(s: &OsStr) -> &OsStr {
+            let mut split = s.rsplitn(2, '\r');
+            if let Some(e) = split.next() {
+                if e.is_empty() {
+                    return split.next().unwrap_or(OsStr::new(""));
+                }
+            }
+            s
+        }
+        Lines(string.split_terminator('\n').map(remove_cr))
+    }
+}
+
+impl<'a> Iterator for Lines<'a> {
+    type Item = &'a OsStr;
+    fn next(&mut self) -> Option<&'a OsStr> { self.0.next() }
+}
+
+impl<'a> DoubleEndedIterator for Lines<'a> {
+    fn next_back(&mut self) -> Option<&'a OsStr> { self.0.next_back() }
 }
 
 
@@ -843,6 +952,56 @@ mod tests {
                 assert_eq!(non_utf8_osstring().to_bytes(), None);
             }
         }
+    }
+
+    #[test]
+    fn osstr_split_whitespace() {
+        assert!(OsStr::new("").split_whitespace().next().is_none());
+        assert!(OsStr::new("").split_whitespace().next_back().is_none());
+        assert!(OsStr::new(" ").split_whitespace().next().is_none());
+        assert!(OsStr::new(" ").split_whitespace().next_back().is_none());
+        assert_eq!(non_utf8_osstring().split_whitespace().collect::<Vec<_>>(),
+                   [&non_utf8_osstring()[..]]);
+
+        let mut string = non_utf8_osstring();
+        string.push(" \n\t aé 💩\u{2009}Q\t");
+        assert_eq!(string.split_whitespace().collect::<Vec<_>>(),
+                   [&non_utf8_osstring()[..], OsStr::new("aé"), OsStr::new("💩"), OsStr::new("Q")]);
+        assert_eq!(string.split_whitespace().rev().collect::<Vec<_>>(),
+                   [OsStr::new("Q"), OsStr::new("💩"), OsStr::new("aé"), &non_utf8_osstring()[..]]);
+        let mut split = string.split_whitespace();
+        assert_eq!(split.next(), Some(&non_utf8_osstring()[..]));
+        assert_eq!(split.next_back(), Some(OsStr::new("Q")));
+        assert_eq!(split.next(), Some(OsStr::new("aé")));
+        assert_eq!(split.next_back(), Some(OsStr::new("💩")));
+        assert_eq!(split.next(), None);
+    }
+
+    #[test]
+    fn osstr_lines() {
+        assert!(OsStr::new("").lines().next().is_none());
+        assert!(OsStr::new("").lines().next_back().is_none());
+        assert_eq!(OsStr::new(" ").lines().collect::<Vec<_>>(), [OsStr::new(" ")]);
+        assert_eq!(OsStr::new(" ").lines().rev().collect::<Vec<_>>(), [OsStr::new(" ")]);
+
+        assert_eq!(non_utf8_osstring().lines().collect::<Vec<_>>(),
+                   [&non_utf8_osstring()[..]]);
+        let mut string = OsString::from("\n \r\n\r\r\n\n");
+        string.push(&non_utf8_osstring());
+        string.push("\n");
+        assert_eq!(string.lines().collect::<Vec<_>>(),
+                   [OsStr::new(""), OsStr::new(" "), OsStr::new("\r"),
+                    OsStr::new(""), &non_utf8_osstring()[..]]);
+        assert_eq!(string.lines().rev().collect::<Vec<_>>(),
+                   [&non_utf8_osstring()[..], OsStr::new(""),
+                    OsStr::new("\r"), OsStr::new(" "), OsStr::new("")]);
+        let mut lines = string.lines();
+        assert_eq!(lines.next(), Some(OsStr::new("")));
+        assert_eq!(lines.next_back(), Some(&non_utf8_osstring()[..]));
+        assert_eq!(lines.next(), Some(OsStr::new(" ")));
+        assert_eq!(lines.next_back(), Some(OsStr::new("")));
+        assert_eq!(lines.next(), Some(OsStr::new("\r")));
+        assert_eq!(lines.next_back(), None);
     }
 
     #[test]
@@ -1255,6 +1414,112 @@ mod tests {
         assert_eq!(rmatches.next_back(), Some("Γ"));
         assert_eq!(rmatches.next(), Some("Γ"));
         assert_eq!(rmatches.next_back(), None);
+    }
+
+    #[test]
+    fn osstr_trim() {
+        assert_eq!(OsStr::new("").trim(), OsStr::new(""));
+        assert_eq!(OsStr::new("Γ").trim(), OsStr::new("Γ"));
+        assert_eq!(OsStr::new("\nΓ").trim(), OsStr::new("Γ"));
+        assert_eq!(OsStr::new("Γ\u{2009}").trim(), OsStr::new("Γ"));
+        assert_eq!(OsStr::new("\n\u{2009}Γ\t ").trim(), OsStr::new("Γ"));
+
+        let mut string = non_utf8_osstring();
+        string.push(" ");
+        string.push(&non_utf8_osstring());
+        assert_eq!(string.trim(), &string[..]);
+    }
+
+    #[test]
+    fn osstr_trim_left() {
+        assert_eq!(OsStr::new("").trim_left(), OsStr::new(""));
+        assert_eq!(OsStr::new("Γ").trim_left(), OsStr::new("Γ"));
+        assert_eq!(OsStr::new("\nΓ").trim_left(), OsStr::new("Γ"));
+        assert_eq!(OsStr::new("Γ\u{2009}").trim_left(), OsStr::new("Γ\u{2009}"));
+        assert_eq!(OsStr::new("\n\u{2009}Γ\t ").trim_left(), OsStr::new("Γ\t "));
+
+        let mut string = non_utf8_osstring();
+        string.push(" ");
+        string.push(&non_utf8_osstring());
+        assert_eq!(string.trim_left(), &string[..]);
+    }
+
+    #[test]
+    fn osstr_trim_right() {
+        assert_eq!(OsStr::new("").trim_right(), OsStr::new(""));
+        assert_eq!(OsStr::new("Γ").trim_right(), OsStr::new("Γ"));
+        assert_eq!(OsStr::new("\nΓ").trim_right(), OsStr::new("\nΓ"));
+        assert_eq!(OsStr::new("Γ\u{2009}").trim_right(), OsStr::new("Γ"));
+        assert_eq!(OsStr::new("\n\u{2009}Γ\t ").trim_right(), OsStr::new("\n\u{2009}Γ"));
+
+        let mut string = non_utf8_osstring();
+        string.push(" ");
+        string.push(&non_utf8_osstring());
+        assert_eq!(string.trim_right(), &string[..]);
+    }
+
+    #[test]
+    fn osstr_trim_matches() {
+        assert_eq!(OsStr::new("").trim_matches('x'), OsStr::new(""));
+        assert_eq!(OsStr::new("x").trim_matches('x'), OsStr::new(""));
+        assert_eq!(OsStr::new("Γ").trim_matches('x'), OsStr::new("Γ"));
+
+        assert_eq!(OsStr::new("xyzxyzx").trim_matches(&['x', 'y'] as &[_]),
+                   OsStr::new("zxyz"));
+
+        let mut string = OsString::from("x");
+        string.push(&non_utf8_osstring());
+        string.push("x");
+        assert_eq!(string.trim_matches('x'), &non_utf8_osstring()[..]);
+
+        let mut string = non_utf8_osstring();
+        string.push("x");
+        string.push(&non_utf8_osstring());
+        assert_eq!(string.trim_matches('x'), &string[..]);
+    }
+
+    #[test]
+    fn osstr_trim_left_matches() {
+        assert_eq!(OsStr::new("").trim_left_matches('x'), OsStr::new(""));
+        assert_eq!(OsStr::new("x").trim_left_matches('x'), OsStr::new(""));
+        assert_eq!(OsStr::new("Γ").trim_left_matches('x'), OsStr::new("Γ"));
+
+        assert_eq!(OsStr::new("xyzxyzx").trim_left_matches(&['x', 'y'] as &[_]),
+                   OsStr::new("zxyzx"));
+
+        let mut string = OsString::from("x");
+        let mut tail = non_utf8_osstring();
+        tail.push("x");
+        string.push(&tail);
+        assert_eq!(string.trim_left_matches('x'), &tail[..]);
+
+        let mut string = non_utf8_osstring();
+        string.push("x");
+        string.push(&non_utf8_osstring());
+        assert_eq!(string.trim_left_matches('x'), &string[..]);
+
+        assert_eq!(string.trim_left_matches(""), &string[..]);
+    }
+
+    #[test]
+    fn osstr_trim_right_matches() {
+        assert_eq!(OsStr::new("").trim_right_matches('x'), OsStr::new(""));
+        assert_eq!(OsStr::new("x").trim_right_matches('x'), OsStr::new(""));
+        assert_eq!(OsStr::new("Γ").trim_right_matches('x'), OsStr::new("Γ"));
+
+        assert_eq!(OsStr::new("xyzxyzx").trim_right_matches(&['x', 'y'] as &[_]),
+                   OsStr::new("xyzxyz"));
+
+        let mut head = OsString::from("x");
+        head.push(non_utf8_osstring());
+        let mut string = head.clone();
+        string.push("x");
+        assert_eq!(string.trim_right_matches('x'), &head[..]);
+
+        let mut string = non_utf8_osstring();
+        string.push("x");
+        string.push(&non_utf8_osstring());
+        assert_eq!(string.trim_right_matches('x'), &string[..]);
     }
 
     #[test]

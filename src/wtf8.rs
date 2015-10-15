@@ -774,6 +774,33 @@ impl Wtf8 {
         RMatches { inner: split_bytes::RMatches::new(&self.bytes, pat) }
     }
 
+    /// Returns a `&Wtf8` with leading and trailing matches of `pat`
+    /// repeatedly removed.
+    pub fn trim_matches<'a, P>(&'a self, pat: P) -> &'a Wtf8
+    where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+        unsafe {
+            Self::from_bytes_unchecked(split_bytes::trim_matches(&self.bytes, pat))
+        }
+    }
+
+    /// Returns a `&Wtf8` with leading matches of `pat` repeatedly
+    /// removed.
+    pub fn trim_left_matches<'a, P>(&'a self, pat: P) -> &'a Wtf8
+    where P: Pattern<'a> {
+        unsafe {
+            Self::from_bytes_unchecked(split_bytes::trim_left_matches(&self.bytes, pat))
+        }
+    }
+
+    /// Returns a `&Wtf8` with trailing matches of `pat` repeatedly
+    /// removed.
+    pub fn trim_right_matches<'a, P>(&'a self, pat: P) -> &'a Wtf8
+    where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
+        unsafe {
+            Self::from_bytes_unchecked(split_bytes::trim_right_matches(&self.bytes, pat))
+        }
+    }
+
     /// Returns true if the slice starts with the given `&str`.
     #[inline]
     pub fn starts_with_str(&self, prefix: &str) -> bool {
@@ -1985,6 +2012,62 @@ mod tests {
         non_utf8.push(CodePoint::from_u32(0xD800).unwrap());
         let replacement = non_utf8.to_string_lossy().into_owned();
         assert!(non_utf8.matches(&replacement).next().is_none());
+    }
+
+    #[test]
+    fn wtf8_trim_matches() {
+        assert_eq!(Wtf8::from_str("").trim_matches('a'), Wtf8::from_str(""));
+        assert_eq!(Wtf8::from_str("b").trim_matches('a'), Wtf8::from_str("b"));
+        assert_eq!(Wtf8::from_str("a").trim_matches('a'), Wtf8::from_str(""));
+        assert_eq!(Wtf8::from_str("ab").trim_matches('a'), Wtf8::from_str("b"));
+        assert_eq!(Wtf8::from_str("ba").trim_matches('a'), Wtf8::from_str("b"));
+        assert_eq!(Wtf8::from_str("aba").trim_matches('a'), Wtf8::from_str("b"));
+        assert_eq!(Wtf8::from_str("bab").trim_matches('a'), Wtf8::from_str("bab"));
+
+        let mut non_utf8 = Wtf8Buf::new();
+        non_utf8.push(CodePoint::from_u32(0xD800).unwrap());
+        let mut string = non_utf8.clone();
+        string.push_str("x");
+        assert_eq!(string.trim_matches('x'), &non_utf8[..]);
+        let mut string = Wtf8Buf::from_str("x");
+        string.push_wtf8(&non_utf8);
+        assert_eq!(string.trim_matches('x'), &non_utf8[..]);
+    }
+
+    #[test]
+    fn wtf8_trim_left_matches() {
+        assert_eq!(Wtf8::from_str("").trim_left_matches('a'), Wtf8::from_str(""));
+        assert_eq!(Wtf8::from_str("b").trim_left_matches('a'), Wtf8::from_str("b"));
+        assert_eq!(Wtf8::from_str("a").trim_left_matches('a'), Wtf8::from_str(""));
+        assert_eq!(Wtf8::from_str("ab").trim_left_matches('a'), Wtf8::from_str("b"));
+        assert_eq!(Wtf8::from_str("ba").trim_left_matches('a'), Wtf8::from_str("ba"));
+
+        let mut non_utf8 = Wtf8Buf::new();
+        non_utf8.push(CodePoint::from_u32(0xD800).unwrap());
+        let mut string = non_utf8.clone();
+        string.push_str("x");
+        assert_eq!(string.trim_left_matches('x'), &string[..]);
+        let mut string = Wtf8Buf::from_str("x");
+        string.push_wtf8(&non_utf8);
+        assert_eq!(string.trim_left_matches('x'), &non_utf8[..]);
+    }
+
+    #[test]
+    fn wtf8_trim_right_matches() {
+        assert_eq!(Wtf8::from_str("").trim_right_matches('a'), Wtf8::from_str(""));
+        assert_eq!(Wtf8::from_str("b").trim_right_matches('a'), Wtf8::from_str("b"));
+        assert_eq!(Wtf8::from_str("a").trim_right_matches('a'), Wtf8::from_str(""));
+        assert_eq!(Wtf8::from_str("ab").trim_right_matches('a'), Wtf8::from_str("ab"));
+        assert_eq!(Wtf8::from_str("ba").trim_right_matches('a'), Wtf8::from_str("b"));
+
+        let mut non_utf8 = Wtf8Buf::new();
+        non_utf8.push(CodePoint::from_u32(0xD800).unwrap());
+        let mut string = non_utf8.clone();
+        string.push_str("x");
+        assert_eq!(string.trim_right_matches('x'), &non_utf8[..]);
+        let mut string = Wtf8Buf::from_str("x");
+        string.push_wtf8(&non_utf8);
+        assert_eq!(string.trim_right_matches('x'), &string[..]);
     }
 
     #[test]

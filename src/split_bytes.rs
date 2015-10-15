@@ -1,3 +1,4 @@
+use core::str;
 use core::str::pattern::{DoubleEndedSearcher, Pattern, ReverseSearcher, Searcher};
 
 use utf8_sections::Utf8Sections;
@@ -355,4 +356,36 @@ impl<'a, P> SplitNImpl<'a, P> where P: Pattern<'a> {
             _ => { self.count -= 1; self.split.next_back() },
         }
     }
+}
+
+
+pub fn trim_matches<'a, P>(slice: &'a [u8], pat: P) -> &'a [u8]
+where P: Pattern<'a> + Clone, P::Searcher: DoubleEndedSearcher<'a> {
+    if let Ok(s) = str::from_utf8(slice) {
+        s.trim_matches(pat).as_bytes()
+    } else {
+        let halfway = trim_left_matches(slice, pat.clone());
+        trim_right_matches(halfway, pat)
+    }
+}
+
+pub fn trim_left_matches<'a, P>(slice: &'a [u8], pat: P) -> &'a [u8]
+where P: Pattern<'a> {
+    let (_, section) = Utf8Sections::new(slice).next().unwrap();
+    let start = pat.into_searcher(section)
+        .next_reject()
+        .map(|(a, _)| a)
+        .unwrap_or(section.len());
+    &slice[start..]
+}
+
+pub fn trim_right_matches<'a, P>(slice: &'a [u8], pat: P) -> &'a [u8]
+where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
+    let (section_start, section) = Utf8Sections::new(slice).next_back().unwrap();
+    let end = section_start +
+        pat.into_searcher(section)
+        .next_reject_back()
+        .map(|(_, b)| b)
+        .unwrap_or(0);
+    &slice[..end]
 }

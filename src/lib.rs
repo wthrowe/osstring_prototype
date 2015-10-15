@@ -5,6 +5,7 @@
 #![feature(box_syntax)]
 #![feature(char_from_unchecked)]
 #![feature(char_internals)]
+#![feature(core)]
 #![feature(decode_utf16)]
 #![feature(iter_arith)]
 #![feature(no_std)]
