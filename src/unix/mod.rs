@@ -116,7 +116,19 @@ impl Slice {
     }
 
     pub fn contains_os(&self, needle: &Slice) -> bool {
-        SliceSearcher::new(&self.inner, &needle.inner).next().is_some()
+        SliceSearcher::new(&self.inner, &needle.inner, true).next().is_some()
+    }
+
+    pub fn replace(&self, from: &Slice, to: &Slice) -> Buf {
+        let mut result = Vec::new();
+        let mut position = 0;
+        for offset in SliceSearcher::new(&self.inner, &from.inner, false) {
+            result.push_all(&self.inner[position..offset]);
+            result.push_all(&to.inner);
+            position = offset + from.len();
+        }
+        result.push_all(&self.inner[position..]);
+        Buf { inner: result }
     }
 
     pub fn starts_with_os(&self, needle: &Slice) -> bool {

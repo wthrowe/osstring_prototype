@@ -128,6 +128,10 @@ impl Slice {
         self.inner.ends_with_wtf8(&needle.inner)
     }
 
+    pub fn replace(&self, from: &Slice, to: &Slice) -> Buf {
+        Buf { inner: self.inner.replace(&from.inner, &to.inner) }
+    }
+
     pub fn utf8_sections<'a>(&'a self) -> Utf8Sections<'a> {
         self.inner.utf8_sections()
     }

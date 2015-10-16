@@ -345,6 +345,12 @@ impl OsStr {
         self.inner.ends_with_os(&needle.as_ref().inner)
     }
 
+    /// Replaces all occurrences of one string with another.
+    pub fn replace<T: AsRef<OsStr>, U: AsRef<OsStr>>(&self, from: T, to: U) -> OsString {
+        OsString::from_inner(self.inner.replace(&from.as_ref().inner,
+                                                &to.as_ref().inner))
+    }
+
     /// An iterator over the non-empty substrings of `self` that
     /// contain no whitespace and are separated by whitespace.
     pub fn split_whitespace<'a>(&'a self) -> SplitWhitespace<'a> {
@@ -1054,6 +1060,25 @@ mod tests {
         assert!(!full.ends_with_os(&start));
         assert!(full.ends_with_os(&end));
         assert!(full.ends_with_os(&full));
+    }
+
+    #[test]
+    fn osstr_replace() {
+        assert_eq!(&*OsStr::new("").replace("a", "b"), OsStr::new(""));
+        assert_eq!(&*OsStr::new("a").replace("a", "b"), OsStr::new("b"));
+        assert_eq!(&*OsStr::new("c").replace("a", "b"), OsStr::new("c"));
+        assert_eq!(&*OsStr::new("a").replace("a", "bc"), OsStr::new("bc"));
+        assert_eq!(&*OsStr::new("caac").replace("a", "bb"), OsStr::new("cbbbbc"));
+        assert_eq!(&*OsStr::new("aaa").replace("aa", "b"), OsStr::new("ba"));
+        assert_eq!(&*OsStr::new("aaaa").replace("aa", "b"), OsStr::new("bb"));
+
+        let (start, end) = split_char();
+        let mut full = start.to_owned();
+        full.push(&end);
+
+        // Use ASCII for the first replace so we can't accidentally match start
+        assert_eq!(&*full.replace(end, "XYZ").replace(start, "Γ"),
+                   OsStr::new("ΓXYZ"));
     }
 
     #[test]

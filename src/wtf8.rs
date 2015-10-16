@@ -39,7 +39,7 @@ use std::borrow::{Borrow, Cow, ToOwned};
 use std::char;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::iter::FromIterator;
+use std::iter::{self, FromIterator};
 use std::mem;
 use std::ops;
 use std::slice;
@@ -165,6 +165,18 @@ impl ops::Deref for Wtf8Buf {
 
 impl Borrow<Wtf8> for Wtf8Buf {
     fn borrow(&self) -> &Wtf8 { &self[..] }
+}
+
+impl AsRef<Wtf8> for Wtf8Buf {
+    fn as_ref(&self) -> &Wtf8 { &self[..] }
+}
+
+impl AsRef<Wtf8> for Wtf8 {
+    fn as_ref(&self) -> &Wtf8 { self }
+}
+
+impl AsRef<Wtf8> for str {
+    fn as_ref(&self) -> &Wtf8 { Wtf8::from_str(self) }
 }
 
 impl ToOwned for Wtf8 {
@@ -615,7 +627,7 @@ impl Wtf8 {
     /// `needle` is contained in the data corresponding to `self`.
     pub fn contains_wtf8(&self, needle: &Wtf8) -> bool {
         // Try the easy case first
-        if SliceSearcher::new(&self.bytes, &needle.bytes).next().is_some() {
+        if SliceSearcher::new(&self.bytes, &needle.bytes, true).next().is_some() {
             return true;
         }
 
@@ -650,7 +662,7 @@ impl Wtf8 {
             }
         }
 
-        let searcher = SliceSearcher::new(&self.bytes, &middle.bytes);
+        let searcher = SliceSearcher::new(&self.bytes, &middle.bytes, true);
         for middle_start in searcher {
             let middle_end = middle_start + middle.len();
             if (start.is_none() || self[..middle_start].last_wide() == start) &&
@@ -798,6 +810,225 @@ impl Wtf8 {
     where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
         unsafe {
             Self::from_bytes_unchecked(split_bytes::trim_right_matches(&self.bytes, pat))
+        }
+    }
+
+    /// Replaces all occurrences of one string with another.
+    // TODO: Benchmark this against just round-tripping through UTF-16
+    // once I have a decent byte substring searcher.
+    pub fn replace<T: AsRef<Wtf8>, U: AsRef<Wtf8>>(&self, from: T, to: U) -> Wtf8Buf {
+        let from = from.as_ref();
+        let to = to.as_ref();
+
+        // Convert a 16-bit code unit to a CodePoint
+        fn cu_to_cp(cu: u16) -> CodePoint {
+            unsafe { CodePoint::from_u32_unchecked(cu as u32) }
+        }
+        // WTF-8 width of a code unit
+        fn cu_width(cu: u16) -> usize {
+            match char::decode_utf16(iter::once(cu)).next().unwrap() {
+                Ok(c) => c.len_utf8(),
+                Err(_) => 3, // Surrogates are always three bytes
+            }
+        }
+
+        // Match only surrogates that could be part of non-BMP characters
+        fn match_surrogates(source: &Wtf8,
+                            surrogates: (Option<u16>, Option<u16>),
+                            to: &Wtf8) -> Wtf8Buf {
+            let code_units = source.encode_wide();
+            match surrogates {
+                (None, None) => {
+                    // OK, from was just an empty string.
+                    let mut result = Wtf8Buf::new();
+                    result.push_wtf8(to);
+                    for cu in code_units {
+                        result.push(cu_to_cp(cu));
+                        result.push_wtf8(to);
+                    }
+                    return result;
+                }
+                (Some(from_cu), None) | (None, Some(from_cu)) => {
+                    // One code unit
+                    let mut result = Wtf8Buf::new();
+                    for cu in code_units {
+                        if cu == from_cu {
+                            result.push_wtf8(to);
+                        } else {
+                            result.push(cu_to_cp(cu));
+                        }
+                    }
+                    return result;
+                }
+                (Some(trail), Some(lead)) => {
+                    let mut code_units = code_units.peekable();
+                    let mut result = Wtf8Buf::new();
+                    while let Some(cu) = code_units.next() {
+                        if cu == trail && code_units.peek() == Some(&lead) {
+                            result.push_wtf8(to);
+                            code_units.next();
+                        } else {
+                            result.push(cu_to_cp(cu));
+                        }
+                    }
+                    return result;
+                }
+            }
+        }
+
+        // Match a fixed string that must occur exactly in the WTF-8
+        // representation, and possibly some surrogates on the ends
+        fn match_fixed(mut source: &Wtf8,
+                       middle: &Wtf8, (start, end): (Option<u16>, Option<u16>),
+                       to: &Wtf8) -> Wtf8Buf {
+            // Search for the fixed middle string, and check if the
+            // ends agree for each match.
+
+            // Ways surrogates can match (or not)
+            #[derive(PartialEq)]
+            enum MatchType {
+                None, // doesn't match
+                Empty, // matches because it's an empty string
+                Cp, // matches a code point in the WTF-8 string
+                // matches a surrogate obtained by splitting a char
+                // (contains the paired surrogate)
+                Split(u16),
+                // matches a surrogate obtained by splitting a char on
+                // the previous match
+                Leftover,
+            }
+
+            let mut result = Wtf8Buf::new();
+            // Any extra trail surrogate at the beginning of our
+            // source resulting from splitting a non-BMP character.
+            let mut extra_surrogate = None;
+            'next_match: loop {
+                let mut search = SliceSearcher::new(&source.bytes, &middle.bytes, true);
+                while let Some(index) = search.next() {
+                    let start_match = match start {
+                        None => MatchType::Empty,
+                        Some(start) => {
+                            if index == 0 {
+                                if Some(start) == extra_surrogate {
+                                    MatchType::Leftover
+                                } else {
+                                    MatchType::None
+                                }
+                            } else {
+                                // The last code point before our match
+                                let last_cp =
+                                    CodePoint::from_iterator_reverse(
+                                        &mut (&source.bytes[..index]).iter())
+                                    .unwrap();
+                                if cu_to_cp(start) == last_cp {
+                                    MatchType::Cp
+                                } else {
+                                    match last_cp.to_surrogates() {
+                                        Some((lead, trail)) if trail == start
+                                            => MatchType::Split(lead),
+                                        _ => MatchType::None,
+                                    }
+                                }
+                            }
+                        }
+                    };
+                    if start_match == MatchType::None { continue; }
+
+                    let end_match = match end {
+                        None => MatchType::Empty,
+                        Some(end) => match CodePoint::from_iterator(
+                            &mut (&source.bytes[index + middle.len()..]).iter()) {
+                            None => MatchType::None,
+                            Some(next_cp) => {
+                                if cu_to_cp(end) == next_cp {
+                                    MatchType::Cp
+                                } else {
+                                    match next_cp.to_surrogates() {
+                                        Some((lead, trail)) if lead == end
+                                            => MatchType::Split(trail),
+                                        _ => MatchType::None,
+                                    }
+                                }
+                            }
+                        }
+                    };
+                    if end_match == MatchType::None { continue; }
+
+                    // We have an actual match!
+
+                    // Add any leading non-matching stuff
+                    if start_match != MatchType::Leftover {
+                        if let Some(surrogate) = extra_surrogate {
+                            result.push(cu_to_cp(surrogate));
+                        }
+                        match start_match {
+                            MatchType::Empty => {
+                                result.push_wtf8(&source[..index]);
+                            }
+                            MatchType::Cp => {
+                                let width = cu_width(start.unwrap());
+                                result.push_wtf8(&source[..index - width]);
+                            }
+                            MatchType::Split(lead) => {
+                                // Non-BMP characters are always four bytes
+                                result.push_wtf8(&source[..index - 4]);
+                                result.push(cu_to_cp(lead));
+                            }
+                            MatchType::Leftover | MatchType::None => unreachable!()
+                        }
+                    }
+
+                    // Add the replacement
+                    result.push_wtf8(to);
+
+                    // Start over with a new source
+                    match end_match {
+                        MatchType::Empty => {
+                            source = &source[index + middle.len()..];
+                            extra_surrogate = None;
+                        }
+                        MatchType::Cp => {
+                            let width = cu_width(end.unwrap());
+                            source = &source[index + middle.len() + width..];
+                            extra_surrogate = None;
+                        }
+                        MatchType::Split(trail) => {
+                            // Non-BMP characters are always four bytes
+                            source = &source[index + middle.len() + 4..];
+                            extra_surrogate = Some(trail);
+                        }
+                        MatchType::Leftover | MatchType::None => unreachable!()
+                    }
+                    continue 'next_match;
+                }
+
+                // No more matches
+                break;
+            }
+
+            // Add any extra stuff at the end
+            if let Some(surrogate) = extra_surrogate {
+                result.push(cu_to_cp(surrogate));
+            }
+            result.push_wtf8(source);
+            result
+        }
+
+        // Split from into an optional trail surrogate, other
+        // stuff, and an optional lead surrogate
+        let start = from.initial_trail_surrogate();
+        let end = from.final_lead_surrogate();
+        let middle = {
+            // Surrogates are always three bytes
+            let start_offset = if start.is_some() { 3 } else { 0 };
+            let end_offset = if end.is_some() { 3 } else { 0 };
+            &from[start_offset..from.len() - end_offset]
+        };
+
+        if middle.is_empty() {
+            match_surrogates(self, (start, end), to)
+        } else {
+            match_fixed(self, middle, (start, end), to)
         }
     }
 
@@ -2068,6 +2299,300 @@ mod tests {
         let mut string = Wtf8Buf::from_str("x");
         string.push_wtf8(&non_utf8);
         assert_eq!(string.trim_right_matches('x'), &string[..]);
+    }
+
+    #[test]
+    fn wtf8_replace_smoke() {
+        assert_eq!(&Wtf8::from_str("").replace("a", "b")[..], Wtf8::from_str(""));
+        assert_eq!(&Wtf8::from_str("a").replace("a", "b")[..], Wtf8::from_str("b"));
+        assert_eq!(&Wtf8::from_str("").replace("", "b")[..], Wtf8::from_str("b"));
+        assert_eq!(&Wtf8::from_str("a").replace("a", "")[..], Wtf8::from_str(""));
+        assert_eq!(&Wtf8::from_str("").replace("", "aé 💩")[..], Wtf8::from_str("aé 💩"));
+        assert_eq!(&Wtf8::from_str("b").replace("b", "aé 💩")[..], Wtf8::from_str("aé 💩"));
+        assert_eq!(&Wtf8::from_str("aaa").replace("a", "b")[..], Wtf8::from_str("bbb"));
+        assert_eq!(&Wtf8::from_str("abb").replace("ab", "a")[..], Wtf8::from_str("ab"));
+    }
+
+    #[test]
+    fn wtf8_replace_empty() {
+        // Matching the empty string
+        fn fw<T: AsRef<[u16]>>(wide: T) -> Wtf8Buf { Wtf8Buf::from_wide(wide.as_ref()) }
+        // BMP
+        assert_eq!(fw([0x0020, 0x0393]).replace("", fw([0x0394])),
+                   fw([0x0394, 0x0020, 0x0394, 0x0393, 0x0394]));
+        // Unpaired surrogates
+        assert_eq!(fw([0xDE3A, 0xD83D]).replace("", fw([0x0394])),
+                   fw([0x0394, 0xDE3A, 0x0394, 0xD83D, 0x0394]));
+        // Paired surrogates
+        assert_eq!(fw([0xD83D, 0xDE3A]).replace("", fw([0x0394])),
+                   fw([0x0394, 0xD83D, 0x0394, 0xDE3A, 0x0394]));
+    }
+
+    #[test]
+    fn wtf8_replace_simple() {
+        // Simple case where the `from` string can't match partial characters
+        fn fw<T: AsRef<[u16]>>(wide: T) -> Wtf8Buf { Wtf8Buf::from_wide(wide.as_ref()) }
+        // Exact match
+        assert_eq!(fw([0xD83D, 0xDE3A]).replace(fw([0xD83D, 0xDE3A]), fw([0x0394])),
+                   fw([0x0394]));
+        // Non-match
+        assert_eq!(fw([0xD83D, 0xDE3B]).replace(fw([0xD83D, 0xDE3A]), fw([0x0394])),
+                   fw([0xD83D, 0xDE3B]));
+        // Not at the start or end
+        assert_eq!(fw([0x0020, 0xD83D, 0xDE3A, 0x0021])
+                   .replace(fw([0xD83D, 0xDE3A]), fw([0x0394])),
+                   fw([0x0020, 0x0394, 0x0021]));
+        // Not at the start or end with surrogates
+        assert_eq!(fw([0xD83D, 0xD83D, 0xDE3A, 0xDE3A])
+                   .replace(fw([0xD83D, 0xDE3A]), fw([0x0394])),
+                   fw([0xD83D, 0x0394, 0xDE3A]));
+        // Non-unicode
+        assert_eq!(fw([0xD83D, 0x0020, 0xDE3A])
+                   .replace(fw([0xD83D, 0x0020, 0xDE3A]), fw([0x0394])),
+                   fw([0x0394]));
+
+    }
+
+    #[test]
+    fn wtf8_replace_surrogate() {
+        // Replace a single surrogate
+        fn fw<T: AsRef<[u16]>>(wide: T) -> Wtf8Buf { Wtf8Buf::from_wide(wide.as_ref()) }
+        // Basic
+        assert_eq!(fw([0xD83D]).replace(fw([0xD83D]), fw([0x0393])),
+                   fw([0x0393]));
+        assert_eq!(fw([0xDE3A]).replace(fw([0xDE3A]), fw([0x0393])),
+                   fw([0x0393]));
+        // Unpaired in the middle
+        assert_eq!(fw([0x0020, 0xD83D, 0x0021]).replace(fw([0xD83D]), fw([0x0393])),
+                   fw([0x0020, 0x0393, 0x0021]));
+        assert_eq!(fw([0x0020, 0xDE3A, 0x0021]).replace(fw([0xDE3A]), fw([0x0393])),
+                   fw([0x0020, 0x0393, 0x0021]));
+        // Paired at the end
+        assert_eq!(fw([0xD83D, 0xDE3A]).replace(fw([0xD83D]), fw([0x0393])),
+                   fw([0x0393, 0xDE3A]));
+        assert_eq!(fw([0xD83D, 0xDE3A]).replace(fw([0xDE3A]), fw([0x0393])),
+                   fw([0xD83D, 0x0393]));
+        // Paired in the middle
+        assert_eq!(fw([0x0020, 0xD83D, 0xDE3A, 0x0021])
+                   .replace(fw([0xD83D]), fw([0x0393])),
+                   fw([0x0020, 0x0393, 0xDE3A, 0x0021]));
+        assert_eq!(fw([0x0020, 0xD83D, 0xDE3A, 0x0021])
+                   .replace(fw([0xDE3A]), fw([0x0393])),
+                   fw([0x0020, 0xD83D, 0x0393, 0x0021]));
+    }
+
+    #[test]
+    fn wtf8_replace_two_surrogates() {
+        // Replace two unpaired surrogates
+        fn fw<T: AsRef<[u16]>>(wide: T) -> Wtf8Buf { Wtf8Buf::from_wide(wide.as_ref()) }
+        // Basic
+        assert_eq!(fw([0xDE3A, 0xD83D])
+                   .replace(fw([0xDE3A, 0xD83D]), fw([0x0393])),
+                   fw([0x0393]));
+        // Unpaired in the middle
+        assert_eq!(fw([0x0020, 0xDE3A, 0xD83D, 0x0021])
+                   .replace(fw([0xDE3A, 0xD83D]), fw([0x0393])),
+                   fw([0x0020, 0x0393, 0x0021]));
+        // Paired in the middle
+        assert_eq!(fw([0xD83D, 0xDE3A, 0xD83D, 0xDE3A])
+                   .replace(fw([0xDE3A, 0xD83D]), fw([0x0393])),
+                   fw([0xD83D, 0x0393, 0xDE3A]));
+        // Two matches splitting a char
+        assert_eq!(fw([0xDE3A, 0xD83D, 0xDE3A, 0xD83D])
+                   .replace(fw([0xDE3A, 0xD83D]), fw([0x0393])),
+                   fw([0x0393, 0x0393]));
+        // Test that creating a new char from parts works
+        assert_eq!(fw([0xD83D, 0xDE3A, 0xD83D, 0xDE3A])
+                   .replace(fw([0xDE3A, 0xD83D]), fw([])),
+                   fw([0xD83D, 0xDE3A]));
+        assert_eq!(fw([0xD83D, 0xDE3A, 0xD83D, 0xDE3A])
+                   .replace(fw([0xDE3A, 0xD83D]), fw([0xDE3B, 0xD83E])),
+                   fw([0xD83D, 0xDE3B, 0xD83E, 0xDE3A]));
+    }
+
+    #[test]
+    fn wtf8_replace_start_surrogate() {
+        // Replace something starting with an unpaired surrogate
+        fn fw<T: AsRef<[u16]>>(wide: T) -> Wtf8Buf { Wtf8Buf::from_wide(wide.as_ref()) }
+        // Wrong surrogate (no match)
+        assert_eq!(fw([0xDE3B, 0x0020])
+                   .replace(fw([0xDE3A, 0x0020]), fw([0x0393])),
+                   fw([0x0DE3B, 0x0020]));
+        // Wrong remainder (no match)
+        assert_eq!(fw([0xDE3A, 0x0021])
+                   .replace(fw([0xDE3A, 0x0020]), fw([0x0393])),
+                   fw([0x0DE3A, 0x0021]));
+        // Entire string
+        assert_eq!(fw([0xDE3A, 0x0020])
+                   .replace(fw([0xDE3A, 0x0020]), fw([0x0393])),
+                   fw([0x0393]));
+        // Middle of string
+        assert_eq!(fw([0x0040, 0xDE3A, 0x0020, 0x0041])
+                   .replace(fw([0xDE3A, 0x0020]), fw([0x0393])),
+                   fw([0x0040, 0x0393, 0x0041]));
+        // Middle of string with extra matches of non-surrogate part
+        assert_eq!(fw([0x0020, 0xDE3A, 0x0020, 0x0020])
+                   .replace(fw([0xDE3A, 0x0020]), fw([0x0393])),
+                   fw([0x0020, 0x0393, 0x0020]));
+        // Paired
+        assert_eq!(fw([0x0040, 0xD83D, 0xDE3A, 0x0020, 0x0041])
+                   .replace(fw([0xDE3A, 0x0020]), fw([0x0393])),
+                   fw([0x0040, 0xD83D, 0x0393, 0x0041]));
+        // Match twice, separated
+        assert_eq!(fw([0x0040, 0xDE3A, 0x0020, 0x0041, 0xDE3A, 0x0020, 0x0042])
+                   .replace(fw([0xDE3A, 0x0020]), fw([0x0393])),
+                   fw([0x0040, 0x0393, 0x0041, 0x0393, 0x0042]));
+        // Match twice, adjacent
+        assert_eq!(fw([0x0040, 0xDE3A, 0x0020, 0xDE3A, 0x0020, 0x0042])
+                   .replace(fw([0xDE3A, 0x0020]), fw([0x0393])),
+                   fw([0x0040, 0x0393, 0x0393, 0x0042]));
+    }
+
+    #[test]
+    fn wtf8_replace_end_surrogate() {
+        // Replace something ending with an unpaired surrogate
+        fn fw<T: AsRef<[u16]>>(wide: T) -> Wtf8Buf { Wtf8Buf::from_wide(wide.as_ref()) }
+        // Wrong surrogate (no match)
+        assert_eq!(fw([0x0020, 0xD83E])
+                   .replace(fw([0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0x0020, 0xD83E]));
+        // Wrong remainder (no match)
+        assert_eq!(fw([0x0021, 0xD83D])
+                   .replace(fw([0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0x0021, 0xD83D]));
+        // Entire string
+        assert_eq!(fw([0x0020, 0xD83D])
+                   .replace(fw([0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0x0393]));
+        // Middle of string
+        assert_eq!(fw([0x0040, 0x0020, 0xD83D, 0x0041])
+                   .replace(fw([0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0x0040, 0x0393, 0x0041]));
+        // Middle of string with extra matches of non-surrogate part
+        assert_eq!(fw([0x0020, 0x0020, 0xD83D, 0x0020])
+                   .replace(fw([0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0x0020, 0x0393, 0x0020]));
+        // Paired
+        assert_eq!(fw([0x0040, 0x0020, 0xD83D, 0xDE3A, 0x0041])
+                   .replace(fw([0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0x0040, 0x0393, 0xDE3A, 0x0041]));
+        // Match twice, separated
+        assert_eq!(fw([0x0040, 0x0020, 0xD83D, 0x0041, 0x0020, 0xD83D, 0x0042])
+                   .replace(fw([0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0x0040, 0x0393, 0x0041, 0x0393, 0x0042]));
+        // Match twice, adjacent
+        assert_eq!(fw([0x0040, 0x0020, 0xD83D, 0x0020, 0xD83D, 0x0042])
+                   .replace(fw([0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0x0040, 0x0393, 0x0393, 0x0042]));
+    }
+
+    #[test]
+    fn wtf8_replace_wtf8_and_two_surrogates() {
+        // Replace something strting and ending with unpaired
+        // surrogates, with other stuff between them
+        fn fw<T: AsRef<[u16]>>(wide: T) -> Wtf8Buf { Wtf8Buf::from_wide(wide.as_ref()) }
+        // Wrong start surrogate (no match)
+        assert_eq!(fw([0xDE3B, 0x0020, 0xD83D])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0xDE3B, 0x0020, 0xD83D]));
+        // Wrong middle (no match)
+        assert_eq!(fw([0xDE3A, 0x0021, 0xD83D])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0xDE3A, 0x0021, 0xD83D]));
+        // Wrong end surrogate (no match)
+        assert_eq!(fw([0xDE3A, 0x0020, 0xD83E])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0xDE3A, 0x0020, 0xD83E]));
+        // Entire match
+        assert_eq!(fw([0xDE3A, 0x0020, 0xD83D])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0x0393]));
+        // Entire match, non-Unicode middle
+        assert_eq!(fw([0xDE3A, 0xDE3A, 0xD83D])
+                   .replace(fw([0xDE3A, 0xDE3A, 0xD83D]), fw([0x0393])),
+                   fw([0x0393]));
+        // Wrong paired start surrogate (no match)
+        assert_eq!(fw([0xD83E, 0xDE3B, 0x0020, 0xD83D, 0xDE3B])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0xD83E, 0xDE3B, 0x0020, 0xD83D, 0xDE3B]));
+        // Wrong paired end surrogate (no match)
+        assert_eq!(fw([0xD83E, 0xDE3A, 0x0020, 0xD83E, 0xDE3B])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0xD83E, 0xDE3A, 0x0020, 0xD83E, 0xDE3B]));
+        // Middle without pairings
+        assert_eq!(fw([0x0020, 0xDE3A, 0x0020, 0xD83D, 0x0021])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0x0020, 0x0393, 0x0021]));
+        // Middle with start paring
+        assert_eq!(fw([0xD83E, 0xDE3A, 0x0020, 0xD83D, 0x0020])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0xD83E, 0x0393, 0x0020]));
+        // Middle with end pairing
+        assert_eq!(fw([0x0020, 0xDE3A, 0x0020, 0xD83D, 0xDE3B])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0x0020, 0x0393, 0xDE3B]));
+        // Middle with two parings
+        assert_eq!(fw([0xD83E, 0xDE3A, 0x0020, 0xD83D, 0xDE3B])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0xD83E, 0x0393, 0xDE3B]));
+        // Middle with two pairings equal to the opposite ends
+        assert_eq!(fw([0xD83D, 0xDE3A, 0x0020, 0xD83D, 0xDE3A])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0xD83D, 0x0393, 0xDE3A]));
+        // Match twice, non-adjacent, unpaired
+        assert_eq!(fw([0x0020,
+                       0xDE3A, 0x0020, 0xD83D,
+                       0x0021,
+                       0xDE3A, 0x0020, 0xD83D,
+                       0x0022])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0x0020, 0x0393, 0x0021, 0x0393, 0x022]));
+        // Match twice, non-adjacent, paired
+        assert_eq!(fw([0xD83E,
+                       0xDE3A, 0x0020, 0xD83D,
+                       0xDE3B, 0x0021, 0xD83E,
+                       0xDE3A, 0x0020, 0xD83D,
+                       0xDE3B])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0xD83E, 0x0393, 0xDE3B, 0x0021, 0xD83E, 0x0393, 0xDE3B]));
+        // Match twice, adjacent, unpaired
+        assert_eq!(fw([0x0020,
+                       0xDE3A, 0x0020, 0xD83D,
+                       0xDE3A, 0x0020, 0xD83D,
+                       0x0022])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0x0020, 0x0393, 0x0393, 0x022]));
+        // Match twice, adjacent, paired
+        assert_eq!(fw([0xD83E,
+                       0xDE3A, 0x0020, 0xD83D,
+                       0xDE3A, 0x0020, 0xD83D,
+                       0xDE3B])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0xD83E, 0x0393, 0x0393, 0xDE3B]));
+        // Match twice, nearly-adjacent, first paired in center
+        assert_eq!(fw([0xD83E,
+                       0xDE3A, 0x0020, 0xD83D,
+                       0xDE3B,
+                       0xDE3A, 0x0020, 0xD83D,
+                       0xDE3B])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0xD83E, 0x0393, 0xDE3B, 0x0393, 0xDE3B]));
+        // Match twice, nearly-adjacent, second paired in center
+        assert_eq!(fw([0xD83E,
+                       0xDE3A, 0x0020, 0xD83D,
+                       0xD83E,
+                       0xDE3A, 0x0020, 0xD83D,
+                       0xDE3B])
+                   .replace(fw([0xDE3A, 0x0020, 0xD83D]), fw([0x0393])),
+                   fw([0xD83E, 0x0393, 0xD83E, 0x0393, 0xDE3B]));
+        // Overlapping middle with previous partial match
+        assert_eq!(fw([0xD83D, 0xDE3A,
+                       0xD83D, 0xDE3A,
+                       0xD83D, 0xDE3A,
+                       0xD83D, 0xDE3A])
+                   .replace(fw([0xDE3A, 0xD83D, 0xDE3A, 0xD83D, 0xDE3A, 0xD83D]),
+                            fw([0x0393])),
+                   fw([0xD83D, 0x0393, 0xDE3A]));
     }
 
     #[test]

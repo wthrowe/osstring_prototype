@@ -59,6 +59,7 @@ pub trait OsStrPrototyping {
     fn contains_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool;
     fn starts_with_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool;
     fn ends_with_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool;
+    fn replace<T: AsRef<ffi::OsStr>, U: AsRef<ffi::OsStr>>(&self, from: T, to: U) -> ffi::OsString;
     fn contains<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a> + Clone;
     fn starts_with<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a>;
     fn ends_with<'a, P>(&'a self, pat: P) -> bool
@@ -106,6 +107,11 @@ impl OsStrPrototyping for ffi::OsStr {
     }
     fn ends_with_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool {
         <&os_str::OsStr>::from(self).ends_with_os(<&os_str::OsStr>::from(needle.as_ref()))
+    }
+    fn replace<T: AsRef<ffi::OsStr>, U: AsRef<ffi::OsStr>>(&self, from: T, to: U) -> ffi::OsString {
+        let from: &os_str::OsStr = from.as_ref().into();
+        let to: &os_str::OsStr = to.as_ref().into();
+        <&os_str::OsStr>::from(self).replace(from, to).into()
     }
     fn contains<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a> + Clone {
         <&os_str::OsStr>::from(self).contains(pat)
@@ -323,6 +329,7 @@ mod tests {
         assert!(string.contains_os(OsStr::new("ll")));
         assert!(string.starts_with_os(OsStr::new("he")));
         assert!(string.ends_with_os(OsStr::new("lo")));
+        assert_eq!(string.replace(OsStr::new("e"), OsStr::new("a")), OsString::from("hallo"));
         assert!(string.contains("ll"));
         assert!(string.starts_with("he"));
         assert!(string.ends_with("lo"));
