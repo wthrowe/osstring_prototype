@@ -1,4 +1,5 @@
 use core::str;
+use core::ops::Range;
 
 #[derive(Clone)]
 pub struct Utf8Sections<'a> {
@@ -111,6 +112,156 @@ impl<'a> DoubleEndedIterator for Utf8Sections<'a> {
         }
         self.end = char_end.checked_sub(1).unwrap_or_else(|| { self.start = 1; 0 });
         return Some((char_end, self.make_string_from(char_end)));
+    }
+}
+
+
+#[derive(Clone, PartialEq, Eq)]
+pub enum Section<'a> {
+    Unicode(&'a str),
+    NonUnicode(&'a [u8]),
+}
+
+#[derive(Clone)]
+pub struct SplitUnicode<'a> {
+    slice: &'a [u8],
+    sections: Utf8Sections<'a>,
+    next_section: (Option<(usize, &'a str)>, Option<(usize, &'a str)>),
+    remaining: Range<usize>,
+}
+
+impl<'a> SplitUnicode<'a> {
+    pub fn new(slice: &'a [u8]) -> Self {
+        SplitUnicode {
+            slice: slice,
+            sections: Utf8Sections::new(slice),
+            next_section: (None, None),
+            remaining: 0..slice.len(),
+        }
+    }
+}
+
+impl<'a> Iterator for SplitUnicode<'a> {
+    type Item = Section<'a>;
+
+    fn next(&mut self) -> Option<Section<'a>> {
+        use self::Section::*;
+
+        if self.remaining.start == self.remaining.end { return None; }
+        if let Some((start, section)) = self.next_section.0.take() {
+            // We have a stored Unicode section.  Return it.
+            self.remaining.start = start + section.len();
+            if section.is_empty() {
+                // Utf8Sections can return empty sections at the ends.
+                // Just skip them.
+                self.next()
+            } else {
+                Some(Unicode(section))
+            }
+        } else {
+            if let Some((start, section)) = self.sections.next() {
+                // We got a new Unicode section.  Return the
+                // non-Unicode part before it and store it for later.
+                self.next_section.0 = Some((start, section));
+                if self.remaining.start == start {
+                    // There is no non-Unicode section here.
+                    // Presumably we are at the beginning of the
+                    // string, before the first section.  Return that
+                    // one instead.
+                    self.next()
+                } else {
+                    let result = &self.slice[self.remaining.start..start];
+                    self.remaining.start = start;
+                    Some(NonUnicode(result))
+                }
+            } else {
+                // Almost done.  We've seen all the Unicode sections.
+                if let Some((start, section)) = self.next_section.1 {
+                    // The other direction still has a section.
+                    if self.remaining.start == start {
+                        // Take it and return it.
+                        self.next_section.1 == None;
+                        self.remaining.start = start + section.len();
+                        Some(Unicode(section))
+                    } else {
+                        // Return the non-Unicode section before it.
+                        let result = &self.slice[self.remaining.start..start];
+                        self.remaining.start = start;
+                        Some(NonUnicode(result))
+                    }
+                } else {
+                    // There are no more Unicode sections, but we
+                    // can't be done because we didn't return at the
+                    // beginning of the function.  Return the last
+                    // non-Unicode section.
+                    let result = &self.slice[self.remaining.clone()];
+                    self.remaining.start = self.remaining.end;
+                    Some(NonUnicode(result))
+                }
+            }
+        }
+    }
+}
+
+impl<'a> DoubleEndedIterator for SplitUnicode<'a> {
+    fn next_back(&mut self) -> Option<Section<'a>> {
+        use self::Section::*;
+
+        if self.remaining.start == self.remaining.end { return None; }
+        if let Some((start, section)) = self.next_section.1.take() {
+            // We have a stored Unicode section.  Return it.
+            self.remaining.end = start;
+            if section.is_empty() {
+                // Utf8Sections can return empty sections at the ends.
+                // Just skip them.
+                self.next_back()
+            } else {
+                Some(Unicode(section))
+            }
+        } else {
+            if let Some((start, section)) = self.sections.next_back() {
+                // We got a new Unicode section.  Return the
+                // non-Unicode part after it and store it for later.
+                self.next_section.1 = Some((start, section));
+                let end = start + section.len();
+                if self.remaining.end == end {
+                    // There is no non-Unicode section here.
+                    // Presumably we are at the end of the string,
+                    // after the last section.  Return that one
+                    // instead.
+                    self.next_back()
+                } else {
+                    let result = &self.slice[end..self.remaining.end];
+                    self.remaining.end = end;
+                    Some(NonUnicode(result))
+                }
+            } else {
+                // Almost done.  We've seen all the Unicode sections.
+                if let Some((start, section)) = self.next_section.0 {
+                    // The other direction still has a section.
+                    let end = start + section.len();
+                    if self.remaining.end == end {
+                        // Take it and return it.
+                        self.next_section.0 == None;
+                        self.remaining.end = start;
+                        Some(Unicode(section))
+                    } else {
+                        // Return the non-Unicode section after it.
+                        let result = &self.slice[end..self.remaining.end];
+                        self.remaining.end = end;
+                        Some(NonUnicode(result))
+                    }
+                } else {
+                    // There are no more Unicode sections, but we
+                    // can't be done because we didn't return at the
+                    // beginning of the function.  Return the last
+                    // non-Unicode section.
+                    let result = &self.slice[self.remaining.clone()];
+                    self.remaining.end = self.remaining.start;
+                    Some(NonUnicode(result))
+                }
+            }
+        }
     }
 }
 

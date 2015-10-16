@@ -13,7 +13,7 @@
 
 use slice_searcher::SliceSearcher;
 use split_bytes;
-use utf8_sections::Utf8Sections;
+use utf8_sections::{self, Utf8Sections};
 
 use std::borrow::Cow;
 use std::fmt::{self, Debug};
@@ -115,6 +115,10 @@ impl Slice {
         self.inner.len()
     }
 
+    pub fn split_unicode<'a>(&'a self) -> SplitUnicode<'a> {
+        SplitUnicode(utf8_sections::SplitUnicode::new(&self.inner))
+    }
+
     pub fn contains_os(&self, needle: &Slice) -> bool {
         SliceSearcher::new(&self.inner, &needle.inner, true).next().is_some()
     }
@@ -190,6 +194,39 @@ impl Slice {
     pub fn trim_right_matches<'a, P>(&'a self, pat: P) -> &'a Slice
     where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
         Self::from_u8_slice(split_bytes::trim_right_matches(&self.inner, pat))
+    }
+}
+
+
+#[derive(Clone)]
+pub enum Section<'a> {
+    Unicode(&'a str),
+    NonUnicode(&'a Slice),
+}
+
+impl<'a> From<utf8_sections::Section<'a>> for Section<'a> {
+    fn from(x: utf8_sections::Section<'a>) -> Section<'a> {
+        match x {
+            utf8_sections::Section::Unicode(s) => Section::Unicode(s),
+            utf8_sections::Section::NonUnicode(s) =>
+                Section::NonUnicode(Slice::from_u8_slice(s)),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct SplitUnicode<'a>(utf8_sections::SplitUnicode<'a>);
+
+impl<'a> Iterator for SplitUnicode<'a> {
+    type Item = Section<'a>;
+    fn next(&mut self) -> Option<Section<'a>> {
+        self.0.next().map(|x| x.into())
+    }
+}
+
+impl<'a> DoubleEndedIterator for SplitUnicode<'a> {
+    fn next_back(&mut self) -> Option<Section<'a>> {
+        self.0.next_back().map(|x| x.into())
     }
 }
 

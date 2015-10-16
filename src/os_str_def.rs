@@ -330,6 +330,25 @@ impl OsStr {
         unsafe { mem::transmute(&self.inner) }
     }
 
+    /// Returns an iterator over the Unicode and non-Unicode sections
+    /// of the string.  Sections will always be nonempty and Unicode
+    /// and non-Unicode sections will always alternate.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::ffi::OsStr;
+    /// use osstring_prototype::prelude::*;
+    /// let string = OsStr::new("Hello!");
+    /// match string.split_unicode().next().unwrap() {
+    ///     OsStrSection::Unicode(s) => assert_eq!(s, "Hello!"),
+    ///     OsStrSection::NonUnicode(s) => panic!("Got non-Unicode: {:?}", s),
+    /// }
+    /// ```
+    pub fn split_unicode<'a>(&'a self) -> SplitUnicode<'a> {
+        SplitUnicode(self.inner.split_unicode())
+    }
+
     /// Returns true if `needle` is a substring of `self`.
     pub fn contains_os<S: AsRef<OsStr>>(&self, needle: S) -> bool {
         self.inner.contains_os(&needle.as_ref().inner)
@@ -606,6 +625,39 @@ impl AsInner<Slice> for OsStr {
     }
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OsStrSection<'a> {
+    Unicode(&'a str),
+    NonUnicode(&'a OsStr),
+}
+
+impl<'a> From<inner::Section<'a>> for OsStrSection<'a> {
+    fn from(x: inner::Section<'a>) -> OsStrSection<'a> {
+        match x {
+            inner::Section::Unicode(s) => OsStrSection::Unicode(s),
+            inner::Section::NonUnicode(s) => OsStrSection::NonUnicode(OsStr::from_inner(s)),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct SplitUnicode<'a>(inner::SplitUnicode<'a>);
+
+impl<'a> Iterator for SplitUnicode<'a> {
+    type Item = OsStrSection<'a>;
+    fn next(&mut self) -> Option<OsStrSection<'a>> {
+        self.0.next().map(|x| x.into())
+    }
+}
+
+impl<'a> DoubleEndedIterator for SplitUnicode<'a> {
+    fn next_back(&mut self) -> Option<OsStrSection<'a>> {
+        self.0.next_back().map(|x| x.into())
+    }
+}
+
+
 #[derive(Clone)]
 pub struct SplitWhitespace<'a>(Filter<Split<'a, fn(char) -> bool>, OsStrNonEmptyHack>);
 
@@ -785,7 +837,6 @@ impl<S: Borrow<OsStr>> LocalSliceConcatExt<OsStr> for [S] {
 mod tests {
     use std::prelude::v1::*;
     use std::borrow::Cow;
-    use std::mem;
     use super::*;
     use slice_concat_ext::LocalSliceConcatExt;
 
@@ -932,6 +983,60 @@ mod tests {
                 assert_eq!(non_unicode_osstring().to_bytes(), None);
             }
         }
+    }
+
+    #[test]
+    fn osstr_split_unicode() {
+        use super::OsStrSection::*;
+        assert!(OsStr::new("").split_unicode().next().is_none());
+        assert!(OsStr::new("").split_unicode().next_back().is_none());
+        assert_eq!(OsStr::new("a").split_unicode().collect::<Vec<_>>(),
+                   [Unicode("a")]);
+        assert_eq!(OsStr::new("a").split_unicode().rev().collect::<Vec<_>>(),
+                   [Unicode("a")]);
+        assert_eq!(non_unicode_osstring().split_unicode().collect::<Vec<_>>(),
+                   [NonUnicode(&non_unicode_osstring()[..])]);
+        assert_eq!(non_unicode_osstring().split_unicode().rev().collect::<Vec<_>>(),
+                   [NonUnicode(&non_unicode_osstring()[..])]);
+
+        let mut string = OsString::from("Γ");
+        string.push(&non_unicode_osstring());
+        string.push("abc");
+        assert_eq!(string.split_unicode().collect::<Vec<_>>(),
+                   [Unicode("Γ"), NonUnicode(&non_unicode_osstring()[..]), Unicode("abc")]);
+        assert_eq!(string.split_unicode().rev().collect::<Vec<_>>(),
+                   [Unicode("abc"), NonUnicode(&non_unicode_osstring()[..]), Unicode("Γ")]);
+
+        let mut split = OsStr::new("a").split_unicode();
+        assert_eq!(split.next(), Some(Unicode("a")));
+        assert_eq!(split.next_back(), None);
+        let mut split = OsStr::new("a").split_unicode();
+        assert_eq!(split.next_back(), Some(Unicode("a")));
+        assert_eq!(split.next(), None);
+
+        let mut string = non_unicode_osstring();
+        string.push("a");
+        string.push(&non_unicode_osstring());
+        let mut split = string.split_unicode();
+        assert_eq!(split.next(), Some(NonUnicode(&non_unicode_osstring()[..])));
+        assert_eq!(split.next_back(), Some(NonUnicode(&non_unicode_osstring()[..])));
+        assert_eq!(split.next_back(), Some(Unicode("a")));
+        assert_eq!(split.next_back(), None);
+        let mut split = string.split_unicode();
+        assert_eq!(split.next(), Some(NonUnicode(&non_unicode_osstring()[..])));
+        assert_eq!(split.next(), Some(Unicode("a")));
+        assert_eq!(split.next_back(), Some(NonUnicode(&non_unicode_osstring()[..])));
+        assert_eq!(split.next_back(), None);
+        let mut split = string.split_unicode();
+        assert_eq!(split.next_back(), Some(NonUnicode(&non_unicode_osstring()[..])));
+        assert_eq!(split.next(), Some(NonUnicode(&non_unicode_osstring()[..])));
+        assert_eq!(split.next(), Some(Unicode("a")));
+        assert_eq!(split.next(), None);
+        let mut split = string.split_unicode();
+        assert_eq!(split.next_back(), Some(NonUnicode(&non_unicode_osstring()[..])));
+        assert_eq!(split.next_back(), Some(Unicode("a")));
+        assert_eq!(split.next(), Some(NonUnicode(&non_unicode_osstring()[..])));
+        assert_eq!(split.next(), None);
     }
 
     #[test]

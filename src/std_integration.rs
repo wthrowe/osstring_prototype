@@ -54,6 +54,7 @@ impl OsStringPrototyping for ffi::OsString {
 pub trait OsStrPrototyping {
     fn is_empty(&self) -> bool;
     fn len(&self) -> usize;
+    fn split_unicode<'a>(&'a self) -> SplitUnicode<'a>;
     fn split_whitespace<'a>(&'a self) -> SplitWhitespace<'a>;
     fn lines<'a>(&'a self) -> Lines<'a>;
     fn contains_os<S: AsRef<ffi::OsStr>>(&self, needle: S) -> bool;
@@ -88,6 +89,9 @@ impl OsStrPrototyping for ffi::OsStr {
     }
     fn len(&self) -> usize {
         <&os_str::OsStr>::from(self).len()
+    }
+    fn split_unicode<'a>(&'a self) -> SplitUnicode<'a> {
+        <&os_str::OsStr>::from(self).split_unicode().into()
     }
     fn split_whitespace<'a>(&'a self) -> SplitWhitespace<'a> {
         <&os_str::OsStr>::from(self).split_whitespace().into()
@@ -162,6 +166,44 @@ impl OsStrPrototyping for ffi::OsStr {
     fn trim_right_matches<'a, P>(&'a self, pat: P) -> &Self
     where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
         <&os_str::OsStr>::from(self).trim_right_matches(pat).into()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OsStrSection<'a> {
+    Unicode(&'a str),
+    NonUnicode(&'a ffi::OsStr),
+}
+
+impl<'a> From<os_str::OsStrSection<'a>> for OsStrSection<'a> {
+    fn from(x: os_str::OsStrSection<'a>) -> OsStrSection<'a> {
+        match x {
+            os_str::OsStrSection::Unicode(s) => OsStrSection::Unicode(s),
+            os_str::OsStrSection::NonUnicode(s) => OsStrSection::NonUnicode(s.into()),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct SplitUnicode<'a>(os_str::SplitUnicode<'a>);
+
+impl<'a> From<os_str::SplitUnicode<'a>> for SplitUnicode<'a> {
+    fn from(x: os_str::SplitUnicode<'a>) -> SplitUnicode<'a> {
+        SplitUnicode(x)
+    }
+}
+
+impl<'a> Iterator for SplitUnicode<'a> {
+    type Item = OsStrSection<'a>;
+
+    fn next(&mut self) -> Option<OsStrSection<'a>> {
+        self.0.next().map(|x| x.into())
+    }
+}
+
+impl<'a> DoubleEndedIterator for SplitUnicode<'a> {
+    fn next_back(&mut self) -> Option<OsStrSection<'a>> {
+        self.0.next_back().map(|x| x.into())
     }
 }
 
@@ -306,6 +348,7 @@ mod tests {
         let string = OsString::from("hello");
         assert!(!string.is_empty());
         assert_eq!(string.len(), 5);
+        assert_eq!(string.split_unicode().next(), Some(OsStrSection::Unicode("hello")));
         assert_eq!(OsStr::new("\nHello  World").split_whitespace().collect::<Vec<_>>(),
                    [OsStr::new("Hello"), OsStr::new("World")]);
         assert_eq!(OsStr::new("\nHello\n  World").lines().collect::<Vec<_>>(),

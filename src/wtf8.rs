@@ -26,7 +26,7 @@
 #![allow(dead_code)]
 
 use split_bytes;
-use utf8_sections::Utf8Sections;
+use utf8_sections::{self, Utf8Sections};
 
 use core::char::{encode_utf8_raw, encode_utf16_raw};
 use core::str::next_code_point;
@@ -621,6 +621,13 @@ impl Wtf8 {
             Some((_, s)) => Some(s),
             None => { Some(last_code_point.to_u32() as u16) }
         }
+    }
+
+    /// Returns an iterator over the Unicode and non-Unicode sections
+    /// of the string.  Sections will always be nonempty and types
+    /// will always alternate.
+    pub fn split_unicode<'a>(&'a self) -> SplitUnicode<'a> {
+        SplitUnicode(utf8_sections::SplitUnicode::new(&self.bytes))
     }
 
     /// Returns true if the ill-formed UTF-16 data corresponding to
@@ -1338,6 +1345,40 @@ macro_rules! make_iterator {
     }
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Section<'a> {
+    Unicode(&'a str),
+    NonUnicode(&'a Wtf8),
+}
+
+impl<'a> From<utf8_sections::Section<'a>> for Section<'a> {
+    fn from<'b>(x: utf8_sections::Section<'a>) -> Section<'a> {
+        match x {
+            utf8_sections::Section::Unicode(s) => Section::Unicode(s),
+            utf8_sections::Section::NonUnicode(s) =>
+                unsafe { Section::NonUnicode(Wtf8::from_bytes_unchecked(s)) },
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct SplitUnicode<'a>(utf8_sections::SplitUnicode<'a>);
+
+impl<'a> Iterator for SplitUnicode<'a> {
+    type Item = Section<'a>;
+    fn next(&mut self) -> Option<Section<'a>> {
+        self.0.next().map(|x| x.into())
+    }
+}
+
+impl<'a> DoubleEndedIterator for SplitUnicode<'a> {
+    fn next_back(&mut self) -> Option<Section<'a>> {
+        self.0.next_back().map(|x| x.into())
+    }
+}
+
+
 make_iterator!{Split requires Searcher is double ended
                yielding |s| unsafe { Wtf8::from_bytes_unchecked(s) } => &'a Wtf8}
 make_iterator!{RSplit requires ReverseSearcher is double ended
@@ -1358,7 +1399,6 @@ make_iterator!{RMatches requires ReverseSearcher is double ended yielding |x| x 
 mod tests {
     use std::prelude::v1::*;
     use std::borrow::Cow;
-    use std::mem;
     use super::*;
 
     #[test]
@@ -1781,6 +1821,37 @@ mod tests {
         let mut x = Wtf8Buf::new();
         x.push(CodePoint::from_u32(cp as u32).unwrap());
         x
+    }
+
+    #[test]
+    fn wtf8_split_unicode() {
+        use super::Section::*;
+        assert!(Wtf8::from_str("").split_unicode().next().is_none());
+        assert!(Wtf8::from_str("").split_unicode().next_back().is_none());
+        assert_eq!(Wtf8::from_str("ab").split_unicode().collect::<Vec<_>>(),
+                   [Unicode("ab")]);
+        assert_eq!(Wtf8::from_str("ab").split_unicode().rev().collect::<Vec<_>>(),
+                   [Unicode("ab")]);
+        let non_unicode = from_cp(0xD800);
+        assert_eq!(non_unicode.split_unicode().collect::<Vec<_>>(),
+                   [NonUnicode(&non_unicode[..])]);
+        assert_eq!(non_unicode.split_unicode().rev().collect::<Vec<_>>(),
+                   [NonUnicode(&non_unicode[..])]);
+
+        let mut string = non_unicode.clone();
+        string.push_str("Γ");
+        assert_eq!(string.split_unicode().collect::<Vec<_>>(),
+                   [NonUnicode(&non_unicode[..]), Unicode("Γ")]);
+        assert_eq!(string.split_unicode().rev().collect::<Vec<_>>(),
+                   [Unicode("Γ"), NonUnicode(&non_unicode[..])]);
+        let mut split = string.split_unicode();
+        assert_eq!(split.next(), Some(NonUnicode(&non_unicode[..])));
+        assert_eq!(split.next_back(), Some(Unicode("Γ")));
+        assert_eq!(split.next(), None);
+        let mut split = string.split_unicode();
+        assert_eq!(split.next_back(), Some(Unicode("Γ")));
+        assert_eq!(split.next(), Some(NonUnicode(&non_unicode[..])));
+        assert_eq!(split.next_back(), None);
     }
 
     #[test]

@@ -116,6 +116,10 @@ impl Slice {
         self.inner.len()
     }
 
+    pub fn split_unicode<'a>(&'a self) -> SplitUnicode<'a> {
+        SplitUnicode(self.inner.split_unicode())
+    }
+
     pub fn contains_os(&self, needle: &Slice) -> bool {
         self.inner.contains_wtf8(&needle.inner)
     }
@@ -183,6 +187,39 @@ impl Slice {
     pub fn trim_right_matches<'a, P>(&'a self, pat: P) -> &'a Slice
     where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
         Self::from_wtf8(self.inner.trim_right_matches(pat))
+    }
+}
+
+
+#[derive(Clone)]
+pub enum Section<'a> {
+    Unicode(&'a str),
+    NonUnicode(&'a Slice),
+}
+
+impl<'a> From<wtf8::Section<'a>> for Section<'a> {
+    fn from(x: wtf8::Section<'a>) -> Section<'a> {
+        match x {
+            wtf8::Section::Unicode(s) => Section::Unicode(s),
+            wtf8::Section::NonUnicode(s) =>
+                Section::NonUnicode(Slice::from_wtf8(s)),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct SplitUnicode<'a>(wtf8::SplitUnicode<'a>);
+
+impl<'a> Iterator for SplitUnicode<'a> {
+    type Item = Section<'a>;
+    fn next(&mut self) -> Option<Section<'a>> {
+        self.0.next().map(|x| x.into())
+    }
+}
+
+impl<'a> DoubleEndedIterator for SplitUnicode<'a> {
+    fn next_back(&mut self) -> Option<Section<'a>> {
+        self.0.next_back().map(|x| x.into())
     }
 }
 

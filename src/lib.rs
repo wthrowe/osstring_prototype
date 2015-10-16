@@ -37,9 +37,10 @@ pub mod windows;
 mod wtf8;
 
 pub use os_str::{OsStr, OsString};
-pub use std_integration::{OsStrPrototyping, OsStringPrototyping};
+pub use std_integration::{OsStrPrototyping, OsStringPrototyping, OsStrSection};
 
 pub mod prelude {
+    pub use super::OsStrSection;
     pub use super::{OsStrPrototyping, OsStringPrototyping};
     pub use super::slice_concat_ext::LocalSliceConcatExt;
 }

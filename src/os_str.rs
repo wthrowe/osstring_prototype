@@ -9,6 +9,6 @@
 // except according to those terms.
 
 #[cfg(unix)]
-pub use unix::os_str::{OsStr, OsString, SplitWhitespace, Lines, Split, RSplit, SplitTerminator, RSplitTerminator, SplitN, RSplitN, Matches, RMatches};
+pub use unix::os_str::{OsStr, OsString, SplitUnicode, OsStrSection, SplitWhitespace, Lines, Split, RSplit, SplitTerminator, RSplitTerminator, SplitN, RSplitN, Matches, RMatches};
 #[cfg(windows)]
-pub use windows::os_str::{OsStr, OsString, SplitWhitespace, Lines, Split, RSplit, SplitTerminator, RSplitTerminator, SplitN, RSplitN, Matches, RMatches};
+pub use windows::os_str::{OsStr, OsString, SplitUnicode, OsStrSection, SplitWhitespace, Lines, Split, RSplit, SplitTerminator, RSplitTerminator, SplitN, RSplitN, Matches, RMatches};
