@@ -119,6 +119,14 @@ impl Slice {
         SliceSearcher::new(&self.inner, &needle.inner, true).next().is_some()
     }
 
+    pub fn starts_with_os(&self, needle: &Slice) -> bool {
+        self.inner.starts_with(&needle.inner)
+    }
+
+    pub fn ends_with_os(&self, needle: &Slice) -> bool {
+        self.inner.ends_with(&needle.inner)
+    }
+
     pub fn replace(&self, from: &Slice, to: &Slice) -> Buf {
         let mut result = Vec::new();
         let mut position = 0;
@@ -129,14 +137,6 @@ impl Slice {
         }
         result.push_all(&self.inner[position..]);
         Buf { inner: result }
-    }
-
-    pub fn starts_with_os(&self, needle: &Slice) -> bool {
-        self.inner.starts_with(&needle.inner)
-    }
-
-    pub fn ends_with_os(&self, needle: &Slice) -> bool {
-        self.inner.ends_with(&needle.inner)
     }
 
     pub fn utf8_sections<'a>(&'a self) -> Utf8Sections<'a> {
