@@ -376,7 +376,7 @@ impl OsStr {
         SplitWhitespace::new(self)
     }
 
-    /// An iterator over the lines of `self`, separated by `\n` of
+    /// An iterator over the lines of `self`, separated by `\n` or
     /// `\r\n`.  This does not return an empty string after a trailing
     /// `\n`.
     pub fn lines<'a>(&'a self) -> Lines<'a> {
