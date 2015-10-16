@@ -490,33 +490,6 @@ impl OsStr {
     where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
         Self::from_inner(self.inner.trim_right_matches(pat))
     }
-
-    /// Returns true if the string starts with a valid UTF-8 sequence
-    /// equal to the given `&str`.
-    pub fn starts_with_str(&self, prefix: &str) -> bool {
-        self.inner.starts_with_str(prefix)
-    }
-
-    /// If the string starts with the given `&str`, returns the rest
-    /// of the string.  Otherwise returns `None`.
-    pub fn remove_prefix_str(&self, prefix: &str) -> Option<&OsStr> {
-        self.inner.remove_prefix_str(prefix).map(|s| Self::from_inner(s))
-    }
-
-    /// Retrieves the first character from the `OsStr` and returns it
-    /// and the remainder of the `OsStr`.  Returns `None` if the
-    /// `OsStr` does not start with a character (either because it it
-    /// empty or because it starts with non-UTF-8 data).
-    pub fn slice_shift_char(&self) -> Option<(char, &OsStr)> {
-        self.inner.slice_shift_char().map(|(a, b)| (a, Self::from_inner(b)))
-    }
-
-    /// If the `OsStr` starts with a UTF-8 section followed by
-    /// `boundary`, returns the sections before and after the boundary
-    /// character.  Otherwise returns `None`.
-    pub fn split_off_str(&self, boundary: char) -> Option<(&str, &OsStr)> {
-        self.inner.split_off_str(boundary).map(|(a, b)| (a, Self::from_inner(b)))
-    }
 }
 
 impl PartialEq for OsStr {
@@ -1558,59 +1531,6 @@ mod tests {
         string.push("x");
         string.push(&non_unicode_osstring());
         assert_eq!(string.trim_right_matches('x'), &string[..]);
-    }
-
-    #[test]
-    fn osstr_starts_with_str() {
-        assert!(OsStr::new("").starts_with_str(""));
-        assert!(!OsStr::new("").starts_with_str("a"));
-        assert!(OsStr::new("abc").starts_with_str("ab"));
-        assert!(unicode_osstring().starts_with_str(unicode_str()));
-        assert!(non_unicode_osstring().starts_with_str(""));
-        assert!(!non_unicode_osstring().starts_with_str("a"));
-    }
-
-    #[test]
-    fn osstr_remove_prefix_str() {
-        assert_eq!(OsStr::new("").remove_prefix_str(""), Some(OsStr::new("")));
-        assert_eq!(OsStr::new("").remove_prefix_str("a"), None);
-        assert_eq!(OsStr::new("abc").remove_prefix_str(""), Some(OsStr::new("abc")));
-        assert_eq!(OsStr::new("abc").remove_prefix_str("ab"), Some(OsStr::new("c")));
-        assert_eq!(OsStr::new("abc").remove_prefix_str("b"), None);
-        assert_eq!(non_unicode_osstring().remove_prefix_str(""),
-                   Some(&non_unicode_osstring()[..]));
-        assert_eq!(non_unicode_osstring().remove_prefix_str("a"), None);
-        let mut string = OsString::from("X");
-        string.push(non_unicode_osstring());
-        assert_eq!(string.remove_prefix_str("X"), Some(&non_unicode_osstring()[..]));
-    }
-
-    #[test]
-    fn osstr_slice_shift_char() {
-        assert!(OsStr::new("").slice_shift_char().is_none());
-
-        let mut string = OsString::from("aé 💩");
-        string.push(non_unicode_osstring());
-        let chars: Vec<char> = (0..).scan(&string[..], |s, _| {
-            if let Some((c, rest)) = s.slice_shift_char() {
-                mem::replace(s, rest);
-                Some(c)
-            } else {
-                None
-            }
-        }).collect();
-        assert_eq!(chars, ['a', 'é', ' ', '💩']);
-    }
-
-    #[test]
-    fn osstr_split_off_str() {
-        assert_eq!(OsStr::new("").split_off_str('a'), None);
-
-        let mut string = OsString::from("aé 💩");
-        string.push(non_unicode_osstring());
-        assert_eq!(string.split_off_str('💩'), Some(("aé ", &non_unicode_osstring()[..])));
-        string.push("x");
-        assert_eq!(string.split_off_str('x'), None);
     }
 
     #[test]

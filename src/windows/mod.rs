@@ -184,22 +184,6 @@ impl Slice {
     where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
         Self::from_wtf8(self.inner.trim_right_matches(pat))
     }
-
-    pub fn starts_with_str(&self, prefix: &str) -> bool {
-        self.inner.starts_with_str(prefix)
-    }
-
-    pub fn remove_prefix_str(&self, prefix: &str) -> Option<&Slice> {
-        self.inner.remove_prefix_str(prefix).map(|s| Self::from_wtf8(s))
-    }
-
-    pub fn slice_shift_char(&self) -> Option<(char, &Slice)> {
-        self.inner.slice_shift_char().map(|(a, b)| (a, Self::from_wtf8(b)))
-    }
-
-    pub fn split_off_str(&self, boundary: char) -> Option<(&str, &Slice)> {
-        self.inner.split_off_str(boundary).map(|(a, b)| (a, Self::from_wtf8(b)))
-    }
 }
 
 macro_rules! make_iterator {

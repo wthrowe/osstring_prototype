@@ -80,10 +80,6 @@ pub trait OsStrPrototyping {
     fn trim_left_matches<'a, P>(&'a self, pat: P) -> &Self where P: Pattern<'a>;
     fn trim_right_matches<'a, P>(&'a self, pat: P) -> &Self
     where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a>;
-    fn starts_with_str(&self, prefix: &str) -> bool;
-    fn remove_prefix_str(&self, prefix: &str) -> Option<&Self>;
-    fn slice_shift_char(&self) -> Option<(char, &Self)>;
-    fn split_off_str(&self, boundary: char) -> Option<(&str, &Self)>;
 }
 
 impl OsStrPrototyping for ffi::OsStr {
@@ -166,18 +162,6 @@ impl OsStrPrototyping for ffi::OsStr {
     fn trim_right_matches<'a, P>(&'a self, pat: P) -> &Self
     where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
         <&os_str::OsStr>::from(self).trim_right_matches(pat).into()
-    }
-    fn starts_with_str(&self, prefix: &str) -> bool {
-        <&os_str::OsStr>::from(self).starts_with_str(prefix)
-    }
-    fn remove_prefix_str(&self, prefix: &str) -> Option<&Self> {
-        <&os_str::OsStr>::from(self).remove_prefix_str(prefix).map(|x| x.into())
-    }
-    fn slice_shift_char(&self) -> Option<(char, &Self)> {
-        <&os_str::OsStr>::from(self).slice_shift_char().map(|(a, b)| (a, b.into()))
-    }
-    fn split_off_str(&self, boundary: char) -> Option<(&str, &Self)> {
-        <&os_str::OsStr>::from(self).split_off_str(boundary).map(|(a, b)| (a, b.into()))
     }
 }
 
@@ -353,12 +337,6 @@ mod tests {
         assert_eq!(OsStr::new("aabcaa").trim_matches('a'), OsStr::new("bc"));
         assert_eq!(OsStr::new("aabcaa").trim_left_matches('a'), OsStr::new("bcaa"));
         assert_eq!(OsStr::new("aabcaa").trim_right_matches('a'), OsStr::new("aabc"));
-        assert!(string.starts_with_str("he"));
-        assert_eq!(string.remove_prefix_str("he"), Some(OsStr::new("llo")));
-        assert_eq!(string.slice_shift_char(), Some(('h', OsStr::new("ello"))));
-        assert_eq!(string.split_off_str('l'), Some(("he", OsStr::new("lo"))));
-        assert_eq!(string.split('l').collect::<Vec<&OsStr>>(),
-                   [OsStr::new("he"), OsStr::new(""), OsStr::new("o")]);
     }
 
     #[test]

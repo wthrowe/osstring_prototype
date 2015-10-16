@@ -191,38 +191,6 @@ impl Slice {
     where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
         Self::from_u8_slice(split_bytes::trim_right_matches(&self.inner, pat))
     }
-
-    pub fn starts_with_str(&self, prefix: &str) -> bool {
-        self.inner.starts_with(prefix.as_bytes())
-    }
-
-    pub fn remove_prefix_str(&self, prefix: &str) -> Option<&Slice> {
-        if self.inner.starts_with(prefix.as_bytes()) {
-            Some(Self::from_u8_slice(&self.inner[prefix.len()..]))
-        } else {
-            None
-        }
-    }
-
-    pub fn slice_shift_char(&self) -> Option<(char, &Slice)> {
-        let utf8_prefix = match str::from_utf8(&self.inner) {
-            Ok(s) => s,
-            Err(e) => str::from_utf8(&self.inner[0..e.valid_up_to()]).unwrap()
-        };
-        utf8_prefix.chars().next()
-            .map(|first|
-                 (first, Self::from_u8_slice(&self.inner[first.len_utf8()..])))
-    }
-
-    pub fn split_off_str(&self, boundary: char) -> Option<(&str, &Slice)> {
-        let utf8_prefix = match str::from_utf8(&self.inner) {
-            Ok(s) => s,
-            Err(e) => str::from_utf8(&self.inner[0..e.valid_up_to()]).unwrap()
-        };
-        utf8_prefix.find(boundary)
-            .map(|b| (&utf8_prefix[0..b],
-                      Self::from_u8_slice(&self.inner[b + boundary.len_utf8()..])))
-    }
 }
 
 macro_rules! make_iterator {
