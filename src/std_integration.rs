@@ -65,14 +65,22 @@ pub trait OsStrPrototyping {
     fn starts_with<'a, P>(&'a self, pat: P) -> bool where P: Pattern<'a>;
     fn ends_with<'a, P>(&'a self, pat: P) -> bool
         where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a>;
-    fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a>;
-    fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a>;
-    fn split_terminator<'a, P>(&'a self, pat: P) -> SplitTerminator<'a, P> where P: Pattern<'a>;
-    fn rsplit_terminator<'a, P>(&'a self, pat: P) -> RSplitTerminator<'a, P> where P: Pattern<'a>;
-    fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P> where P: Pattern<'a>;
-    fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P> where P: Pattern<'a>;
-    fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P> where P: Pattern<'a>;
-    fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P> where P: Pattern<'a>;
+    fn split<'a, P>(&'a self, pat: P) -> Split<'a, P>
+        where P: Pattern<'a> + Clone;
+    fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a>;
+    fn split_terminator<'a, P>(&'a self, pat: P) -> SplitTerminator<'a, P>
+        where P: Pattern<'a> + Clone;
+    fn rsplit_terminator<'a, P>(&'a self, pat: P) -> RSplitTerminator<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a>;
+    fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P>
+        where P: Pattern<'a> + Clone;
+    fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a>;
+    fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P>
+        where P: Pattern<'a> + Clone;
+    fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a>;
     fn trim(&self) -> &Self;
     fn trim_left(&self) -> &Self;
     fn trim_right(&self) -> &Self;
@@ -123,28 +131,36 @@ impl OsStrPrototyping for ffi::OsStr {
         where P: Pattern<'a>, P::Searcher: ReverseSearcher<'a> {
         <&os_str::OsStr>::from(self).ends_with(pat)
     }
-    fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a> {
+    fn split<'a, P>(&'a self, pat: P) -> Split<'a, P>
+    where P: Pattern<'a> + Clone {
         <&os_str::OsStr>::from(self).split(pat).into()
     }
-    fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a> {
+    fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P>
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         <&os_str::OsStr>::from(self).rsplit(pat).into()
     }
-    fn split_terminator<'a, P>(&'a self, pat: P) -> SplitTerminator<'a, P> where P: Pattern<'a> {
+    fn split_terminator<'a, P>(&'a self, pat: P) -> SplitTerminator<'a, P>
+    where P: Pattern<'a> + Clone {
         <&os_str::OsStr>::from(self).split_terminator(pat).into()
     }
-    fn rsplit_terminator<'a, P>(&'a self, pat: P) -> RSplitTerminator<'a, P> where P: Pattern<'a> {
+    fn rsplit_terminator<'a, P>(&'a self, pat: P) -> RSplitTerminator<'a, P>
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         <&os_str::OsStr>::from(self).rsplit_terminator(pat).into()
     }
-    fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P> where P: Pattern<'a> {
+    fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P>
+    where P: Pattern<'a> + Clone {
         <&os_str::OsStr>::from(self).splitn(count, pat).into()
     }
-    fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P> where P: Pattern<'a> {
+    fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P>
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         <&os_str::OsStr>::from(self).rsplitn(count, pat).into()
     }
-    fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P> where P: Pattern<'a> {
+    fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P>
+    where P: Pattern<'a> + Clone {
         <&os_str::OsStr>::from(self).matches(pat).into()
     }
-    fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P> where P: Pattern<'a> {
+    fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P>
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         <&os_str::OsStr>::from(self).rmatches(pat).into()
     }
     fn trim(&self) -> &Self {

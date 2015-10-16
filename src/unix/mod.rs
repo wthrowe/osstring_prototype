@@ -147,37 +147,43 @@ impl Slice {
         Utf8Sections::new(&self.inner)
     }
 
-    pub fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a> {
+    pub fn split<'a, P>(&'a self, pat: P) -> Split<'a, P>
+    where P: Pattern<'a> + Clone {
         Split { inner: split_bytes::Split::new(&self.inner, pat) }
     }
 
-    pub fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a> {
+    pub fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P>
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         RSplit { inner: split_bytes::RSplit::new(&self.inner, pat) }
     }
 
     pub fn split_terminator<'a, P>(&'a self, pat: P) -> SplitTerminator<'a, P>
-    where P: Pattern<'a> {
+    where P: Pattern<'a> + Clone {
         SplitTerminator { inner: split_bytes::SplitTerminator::new(&self.inner, pat) }
     }
 
     pub fn rsplit_terminator<'a, P>(&'a self, pat: P) -> RSplitTerminator<'a, P>
-    where P: Pattern<'a> {
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         RSplitTerminator { inner: split_bytes::RSplitTerminator::new(&self.inner, pat) }
     }
 
-    pub fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P> where P: Pattern<'a> {
+    pub fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P>
+    where P: Pattern<'a> + Clone {
         SplitN { inner: split_bytes::SplitN::new(&self.inner, count, pat) }
     }
 
-    pub fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P> where P: Pattern<'a> {
+    pub fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P>
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         RSplitN { inner: split_bytes::RSplitN::new(&self.inner, count, pat) }
     }
 
-    pub fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P> where P: Pattern<'a> {
+    pub fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P>
+    where P: Pattern<'a> + Clone {
         Matches { inner: split_bytes::Matches::new(&self.inner, pat) }
     }
 
-    pub fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P> where P: Pattern<'a> {
+    pub fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P>
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         RMatches { inner: split_bytes::RMatches::new(&self.inner, pat) }
     }
 

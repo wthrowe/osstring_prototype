@@ -728,7 +728,8 @@ impl Wtf8 {
     /// matched by a pattern.  See `str::split` for details.
     ///
     /// Note that patterns can only match UTF-8 sections.
-    pub fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a> {
+    pub fn split<'a, P>(&'a self, pat: P) -> Split<'a, P>
+    where P: Pattern<'a> + Clone {
         Split { inner: split_bytes::Split::new(&self.bytes, pat) }
     }
 
@@ -737,7 +738,8 @@ impl Wtf8 {
     /// details.
     ///
     /// Note that patterns can only match UTF-8 sections.
-    pub fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a> {
+    pub fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P>
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         RSplit { inner: split_bytes::RSplit::new(&self.bytes, pat) }
     }
 
@@ -746,7 +748,7 @@ impl Wtf8 {
     ///
     /// Note that patterns can only match UTF-8 sections.
     pub fn split_terminator<'a, P>(&'a self, pat: P) -> SplitTerminator<'a, P>
-    where P: Pattern<'a> {
+    where P: Pattern<'a> + Clone {
         SplitTerminator { inner: split_bytes::SplitTerminator::new(&self.bytes, pat) }
     }
 
@@ -755,7 +757,7 @@ impl Wtf8 {
     ///
     /// Note that patterns can only match UTF-8 sections.
     pub fn rsplit_terminator<'a, P>(&'a self, pat: P) -> RSplitTerminator<'a, P>
-    where P: Pattern<'a> {
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         RSplitTerminator { inner: split_bytes::RSplitTerminator::new(&self.bytes, pat) }
     }
 
@@ -764,7 +766,8 @@ impl Wtf8 {
     /// items.  See `str::splitn` for details.
     ///
     /// Note that patterns can only match UTF-8 sections.
-    pub fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P> where P: Pattern<'a> {
+    pub fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P>
+    where P: Pattern<'a> + Clone {
         SplitN { inner: split_bytes::SplitN::new(&self.bytes, count, pat) }
     }
 
@@ -773,7 +776,8 @@ impl Wtf8 {
     /// at most `count` items.  See `str::rsplitn` for details.
     ///
     /// Note that patterns can only match UTF-8 sections.
-    pub fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P> where P: Pattern<'a> {
+    pub fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P>
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         RSplitN { inner: split_bytes::RSplitN::new(&self.bytes, count, pat) }
     }
 
@@ -781,7 +785,8 @@ impl Wtf8 {
     /// `str::matches` for details.
     ///
     /// Note that patterns can only match UTF-8 sections.
-    pub fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P> where P: Pattern<'a> {
+    pub fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P>
+    where P: Pattern<'a> + Clone {
         Matches { inner: split_bytes::Matches::new(&self.bytes, pat) }
     }
 
@@ -789,7 +794,8 @@ impl Wtf8 {
     /// order.  See `str::rmatches` for details.
     ///
     /// Note that patterns can only match UTF-8 sections.
-    pub fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P> where P: Pattern<'a> {
+    pub fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P>
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         RMatches { inner: split_bytes::RMatches::new(&self.bytes, pat) }
     }
 

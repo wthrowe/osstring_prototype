@@ -409,7 +409,8 @@ impl OsStr {
     /// matched by a pattern.  See `str::split` for details.
     ///
     /// Note that patterns can only match Unicode sections of the `OsStr`.
-    pub fn split<'a, P>(&'a self, pat: P) -> Split<'a, P> where P: Pattern<'a> {
+    pub fn split<'a, P>(&'a self, pat: P) -> Split<'a, P>
+    where P: Pattern<'a> + Clone {
         Split { inner: self.inner.split(pat) }
     }
 
@@ -418,7 +419,8 @@ impl OsStr {
     /// details.
     ///
     /// Note that patterns can only match Unicode sections of the `OsStr`.
-    pub fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P> where P: Pattern<'a> {
+    pub fn rsplit<'a, P>(&'a self, pat: P) -> RSplit<'a, P>
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         RSplit { inner: self.inner.rsplit(pat) }
     }
 
@@ -427,7 +429,7 @@ impl OsStr {
     ///
     /// Note that patterns can only match Unicode sections of the `OsStr`.
     pub fn split_terminator<'a, P>(&'a self, pat: P) -> SplitTerminator<'a, P>
-    where P: Pattern<'a> {
+    where P: Pattern<'a> + Clone {
         SplitTerminator { inner: self.inner.split_terminator(pat) }
     }
 
@@ -436,7 +438,7 @@ impl OsStr {
     ///
     /// Note that patterns can only match Unicode sections of the `OsStr`.
     pub fn rsplit_terminator<'a, P>(&'a self, pat: P) -> RSplitTerminator<'a, P>
-    where P: Pattern<'a> {
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         RSplitTerminator { inner: self.inner.rsplit_terminator(pat) }
     }
 
@@ -445,7 +447,8 @@ impl OsStr {
     /// items.  See `str::splitn` for details.
     ///
     /// Note that patterns can only match Unicode sections of the `OsStr`.
-    pub fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P> where P: Pattern<'a> {
+    pub fn splitn<'a, P>(&'a self, count: usize, pat: P) -> SplitN<'a, P>
+    where P: Pattern<'a> + Clone {
         SplitN { inner: self.inner.splitn(count, pat) }
     }
 
@@ -454,7 +457,8 @@ impl OsStr {
     /// at most `count` items.  See `str::rsplitn` for details.
     ///
     /// Note that patterns can only match Unicode sections of the `OsStr`.
-    pub fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P> where P: Pattern<'a> {
+    pub fn rsplitn<'a, P>(&'a self, count: usize, pat: P) -> RSplitN<'a, P>
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         RSplitN { inner: self.inner.rsplitn(count, pat) }
     }
 
@@ -462,7 +466,8 @@ impl OsStr {
     /// `str::matches` for details.
     ///
     /// Note that patterns can only match Unicode sections of the `OsStr`.
-    pub fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P> where P: Pattern<'a> {
+    pub fn matches<'a, P>(&'a self, pat: P) -> Matches<'a, P>
+    where P: Pattern<'a> + Clone {
         Matches { inner: self.inner.matches(pat) }
     }
 
@@ -470,7 +475,8 @@ impl OsStr {
     /// order.  See `str::rmatches` for details.
     ///
     /// Note that patterns can only match Unicode sections of the `OsStr`.
-    pub fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P> where P: Pattern<'a> {
+    pub fn rmatches<'a, P>(&'a self, pat: P) -> RMatches<'a, P>
+    where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
         RMatches { inner: self.inner.rmatches(pat) }
     }
 

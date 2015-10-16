@@ -49,13 +49,14 @@ macro_rules! make_iterator {
 }
 macro_rules! implement {
     (new for $forward:ident and $reverse:ident wrap $inner:ident yielding $map:expr => $ret:ty) => {
-        impl<'a, P> $forward<'a, P> where P: Pattern<'a> {
+        impl<'a, P> $forward<'a, P> where P: Pattern<'a> + Clone {
             pub fn new(slice: &'a [u8], pat: P) -> Self {
                 $forward($inner::new(slice, pat))
             }
         }
 
-        impl<'a, P> $reverse<'a, P> where P: Pattern<'a> {
+        impl<'a, P> $reverse<'a, P>
+        where P: Pattern<'a> + Clone, P::Searcher: ReverseSearcher<'a> {
             pub fn new(slice: &'a [u8], pat: P) -> Self {
                 $reverse($inner::new(slice, pat))
             }
