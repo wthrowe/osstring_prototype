@@ -78,7 +78,7 @@ impl Buf {
     }
 
     pub fn push_slice(&mut self, s: &Slice) {
-        self.inner.push_all(&s.inner)
+        self.inner.extend_from_slice(&s.inner)
     }
 
     pub fn clear(&mut self) {
@@ -135,11 +135,11 @@ impl Slice {
         let mut result = Vec::new();
         let mut position = 0;
         for offset in SliceSearcher::new(&self.inner, &from.inner, false) {
-            result.push_all(&self.inner[position..offset]);
-            result.push_all(&to.inner);
+            result.extend_from_slice(&self.inner[position..offset]);
+            result.extend_from_slice(&to.inner);
             position = offset + from.len();
         }
-        result.push_all(&self.inner[position..]);
+        result.extend_from_slice(&self.inner[position..]);
         Buf { inner: result }
     }
 

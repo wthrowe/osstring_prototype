@@ -3,19 +3,17 @@
 
 #![feature(ascii)]
 #![feature(box_syntax)]
-#![feature(char_from_unchecked)]
 #![feature(char_internals)]
-#![feature(core)]
 #![feature(decode_utf16)]
 #![feature(iter_arith)]
-#![feature(no_std)]
 #![feature(pattern)]
-#![feature(slice_bytes)]
 #![feature(slice_patterns)]
 #![feature(str_internals)]
 #![feature(unboxed_closures)]
-#![feature(utf8_error)]
-#![feature(vec_push_all)]
+#![feature(fn_traits)]
+#![feature(copy_from_slice)]
+
+#![cfg_attr(test, feature(osstring_simple_functions))]
 
 // This somewhat silly looking sequence is avoid the automatic prelude
 // import so that code behaves more like it does in libstd itself.
