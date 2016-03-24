@@ -3,7 +3,6 @@
 
 #![feature(ascii)]
 #![feature(box_syntax)]
-#![feature(char_internals)]
 #![feature(decode_utf16)]
 #![feature(iter_arith)]
 #![feature(pattern)]
